@@ -7,7 +7,6 @@
 // Used under MIT License.
 
 import 'dart:math' as math;
-
 import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
@@ -181,7 +180,8 @@ class GlassBottomBar extends StatefulWidget {
     this.selectedIconColor = Colors.white,
     this.unselectedIconColor = Colors.white,
     this.iconSize = 24,
-    this.textStyle,
+    this.selectedLabelStyle,
+    this.unselectedLabelStyle,
     this.glowDuration = const Duration(milliseconds: 300),
     this.glowBlurRadius = 32,
     this.glowSpreadRadius = 8,
@@ -390,7 +390,13 @@ class GlassBottomBar extends StatefulWidget {
   ///
   /// If null, uses default style with fontSize 11, and fontWeight that
   /// changes based on selection (w600 for selected, w500 for unselected).
-  final TextStyle? textStyle;
+  final TextStyle? selectedLabelStyle;
+
+  /// Text style for tab labels.
+  ///
+  /// If null, uses default style with fontSize 11, and fontWeight that
+  /// changes based on selection (w600 for selected, w500 for unselected).
+  final TextStyle? unselectedLabelStyle;
 
   // ===========================================================================
   // Glow Effect Properties
@@ -490,7 +496,8 @@ class _GlassBottomBarState extends State<GlassBottomBar> {
                             selectedIconColor: widget.selectedIconColor,
                             unselectedIconColor: widget.unselectedIconColor,
                             iconSize: widget.iconSize,
-                            textStyle: widget.textStyle,
+                            selectedLabelStyle: widget.selectedLabelStyle,
+                            unselectedLabelStyle: widget.unselectedLabelStyle,
                             glowDuration: widget.glowDuration,
                             glowBlurRadius: widget.glowBlurRadius,
                             glowSpreadRadius: widget.glowSpreadRadius,
@@ -556,7 +563,8 @@ class _GlassBottomBarState extends State<GlassBottomBar> {
                         selectedIconColor: widget.selectedIconColor,
                         unselectedIconColor: widget.unselectedIconColor,
                         iconSize: widget.iconSize,
-                        textStyle: widget.textStyle,
+                        selectedLabelStyle: widget.selectedLabelStyle,
+                        unselectedLabelStyle: widget.unselectedLabelStyle,
                         glowDuration: widget.glowDuration,
                         glowBlurRadius: widget.glowBlurRadius,
                         glowSpreadRadius: widget.glowSpreadRadius,
@@ -590,8 +598,9 @@ class GlassBottomBarTab {
   /// Creates a bottom bar tab configuration.
   const GlassBottomBarTab({
     this.label,
-    required this.icon,
+    this.icon,
     this.selectedIcon,
+    this.svgIcon,
     this.glowColor,
     this.thickness,
   });
@@ -602,12 +611,17 @@ class GlassBottomBarTab {
   /// Icon displayed when the tab is not selected.
   ///
   /// Also used when selected if [selectedIcon] is not provided.
-  final IconData icon;
+  final IconData? icon;
 
   /// Icon displayed when the tab is selected.
   ///
   /// If null, uses [icon] for both selected and unselected states.
   final IconData? selectedIcon;
+
+  /// SVG icon displayed when the tab is not selected.
+  ///
+  /// If null, uses [icon] for both selected and unselected states.
+  final Widget? svgIcon;
 
   /// Color of the animated glow effect when this tab is selected.
   ///
@@ -669,7 +683,8 @@ class _BottomBarTab extends StatelessWidget {
     required this.selectedIconColor,
     required this.unselectedIconColor,
     required this.iconSize,
-    required this.textStyle,
+    required this.selectedLabelStyle,
+    required this.unselectedLabelStyle,
     required this.glowDuration,
     required this.glowBlurRadius,
     required this.glowSpreadRadius,
@@ -682,7 +697,8 @@ class _BottomBarTab extends StatelessWidget {
   final Color selectedIconColor;
   final Color unselectedIconColor;
   final double iconSize;
-  final TextStyle? textStyle;
+  final TextStyle? selectedLabelStyle;
+  final TextStyle? unselectedLabelStyle;
   final Duration glowDuration;
   final double glowBlurRadius;
   final double glowSpreadRadius;
@@ -692,6 +708,7 @@ class _BottomBarTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final iconColor = selected ? selectedIconColor : unselectedIconColor;
+    final labelStyle = selected ? selectedLabelStyle : unselectedLabelStyle;
 
     return GestureDetector(
       onTap: onTap,
@@ -750,12 +767,15 @@ class _BottomBarTab extends StatelessWidget {
                       ),
 
                     // Icon with optional thickness effect
-                    Icon(
-                      selected ? (tab.selectedIcon ?? tab.icon) : tab.icon,
-                      color: iconColor,
-                      size: iconSize,
-                      shadows: _buildIconShadows(),
-                    ),
+                    if (tab.svgIcon != null)
+                      tab.svgIcon!
+                    else if (tab.icon != null)
+                      Icon(
+                        selected ? (tab.selectedIcon ?? tab.icon) : tab.icon,
+                        color: iconColor,
+                        size: iconSize,
+                        shadows: _buildIconShadows(),
+                      ),
                   ],
                 ),
               ),
@@ -769,13 +789,7 @@ class _BottomBarTab extends StatelessWidget {
                   maxLines: 1,
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
-                  style: textStyle ??
-                      TextStyle(
-                        color: iconColor,
-                        fontSize: 11,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
-                      ),
+                  style: labelStyle,
                 ),
               ],
             ],
