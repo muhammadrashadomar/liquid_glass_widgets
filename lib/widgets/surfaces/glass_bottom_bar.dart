@@ -13,6 +13,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:motor/motor.dart';
+import 'package:vector_graphics/vector_graphics_compat.dart';
 
 import '../../types/glass_quality.dart';
 import '../../utils/draggable_indicator_physics.dart';
@@ -621,7 +622,7 @@ class GlassBottomBarTab {
   /// SVG icon displayed when the tab is not selected.
   ///
   /// If null, uses [icon] for both selected and unselected states.
-  final Widget? svgIcon;
+  final String? svgIcon;
 
   /// Color of the animated glow effect when this tab is selected.
   ///
@@ -768,7 +769,15 @@ class _BottomBarTab extends StatelessWidget {
 
                     // Icon with optional thickness effect
                     if (tab.svgIcon != null)
-                      tab.svgIcon!
+                      RepaintBoundary(
+                        child: VectorGraphic(
+                          loader: AssetBytesLoader(tab.svgIcon!),
+                          width: iconSize,
+                          height: iconSize,
+                          colorFilter:
+                              ColorFilter.mode(iconColor, BlendMode.srcIn),
+                        ),
+                      )
                     else if (tab.icon != null)
                       Icon(
                         selected ? (tab.selectedIcon ?? tab.icon) : tab.icon,
