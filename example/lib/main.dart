@@ -1,9 +1,8 @@
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:liquid_glass_widgets_example/constants/glass_settings.dart';
 import 'package:liquid_glass_widgets_example/pages/containers_page.dart';
-import 'package:liquid_glass_widgets_example/pages/feedback_page.dart';
 import 'package:liquid_glass_widgets_example/pages/input_page.dart';
 import 'package:liquid_glass_widgets_example/pages/interactive_page.dart';
 import 'package:liquid_glass_widgets_example/pages/overlays_page.dart';
@@ -54,7 +53,7 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
     HomePage(),
     ContainersPage(),
     InteractivePage(),
-    FeedbackPage(),
+    // FeedbackPage(),
     OverlaysPage(),
     SurfacesPage(),
     InputPage(),
@@ -98,11 +97,11 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
                 icon: CupertinoIcons.hand_point_right,
                 selectedIcon: CupertinoIcons.hand_point_right_fill,
               ),
-              GlassBottomBarTab(
-                label: 'Feedback',
-                icon: CupertinoIcons.hourglass,
-                selectedIcon: CupertinoIcons.hourglass,
-              ),
+              // GlassBottomBarTab(
+              //   label: 'Feedback',
+              //   icon: CupertinoIcons.hourglass,
+              //   selectedIcon: CupertinoIcons.hourglass,
+              // ),
               GlassBottomBarTab(
                 label: 'Overlays',
                 icon: CupertinoIcons.square_stack,
