@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:liquid_glass_widgets_example/constants/glass_settings.dart';
 import 'package:liquid_glass_widgets_example/pages/containers_page.dart';
@@ -23,20 +24,58 @@ class AppleLiquidGlassShowcaseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Apple Liquid Glass Showcase',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        colorScheme: ColorScheme.dark(
-          primary: Colors.blue,
-          surface: Colors.black,
+    return _AppScope(
+      builder: (context, locale) => MaterialApp(
+        title: 'Apple Liquid Glass Showcase',
+        locale: const Locale('ar', ''),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('ar', ''),
+          Locale('en', ''),
+        ],
+        theme: ThemeData(
+          brightness: Brightness.dark,
+          useMaterial3: true,
+          colorScheme: ColorScheme.dark(
+            primary: Colors.blue,
+            surface: Colors.black,
+          ),
         ),
+        home: const ShowcaseHomePage(),
+        debugShowCheckedModeBanner: false,
       ),
-      home: const ShowcaseHomePage(),
-      debugShowCheckedModeBanner: false,
     );
   }
+}
+
+class _AppScope extends StatefulWidget {
+  const _AppScope({required this.builder});
+  final Widget Function(BuildContext, Locale) builder;
+
+  static _AppScopeState of(BuildContext context) =>
+      context.findAncestorStateOfType<_AppScopeState>()!;
+
+  @override
+  State<_AppScope> createState() => _AppScopeState();
+}
+
+class _AppScopeState extends State<_AppScope> {
+  Locale _locale = const Locale('en');
+
+  void toggleLocale() {
+    setState(() {
+      _locale = _locale.languageCode == 'en'
+          ? const Locale('ar')
+          : const Locale('en');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _locale);
 }
 
 class ShowcaseHomePage extends StatefulWidget {
@@ -131,6 +170,10 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
             //   },
             //   label: 'AI Chat',
             // ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () => _AppScope.of(context).toggleLocale(),
+            child: const Icon(Icons.language),
           ),
         ),
       ),

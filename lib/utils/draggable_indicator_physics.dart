@@ -148,9 +148,10 @@ class DraggableIndicatorPhysics {
   /// computeAlignment(1, 3) // Returns  0.0 (center)
   /// computeAlignment(2, 3) // Returns  1.0 (right)
   /// ```
-  static double computeAlignment(int index, int itemCount) {
+  static double computeAlignment(int index, int itemCount, {bool isRtl = false}) {
     final relativeIndex = (index / (itemCount - 1)).clamp(0.0, 1.0);
-    return (relativeIndex * 2) - 1;
+    final alignment = (relativeIndex * 2) - 1;
+    return isRtl ? -alignment : alignment;
   }
 
   /// Converts a global drag position to horizontal alignment (-1 to 1).
@@ -166,8 +167,9 @@ class DraggableIndicatorPhysics {
   static double getAlignmentFromGlobalPosition(
     Offset globalPosition,
     BuildContext context,
-    int itemCount,
-  ) {
+    int itemCount, {
+    bool isRtl = false,
+  }) {
     final box = context.findRenderObject()! as RenderBox;
     final localPosition = box.globalToLocal(globalPosition);
 
@@ -177,14 +179,21 @@ class DraggableIndicatorPhysics {
     final padding = indicatorWidth / 2;
 
     // Map drag position to 0-1 range
-    final rawRelativeX = (localPosition.dx / box.size.width).clamp(0.0, 1.0);
+    var rawRelativeX = (localPosition.dx / box.size.width).clamp(0.0, 1.0);
+
+    // Flip position if RTL
+    if (isRtl) {
+      rawRelativeX = 1.0 - rawRelativeX;
+    }
+
     final normalizedX = (rawRelativeX - padding) / draggableRange;
 
     // Apply rubber band resistance for overdrag
     final adjustedRelativeX = applyRubberBandResistance(normalizedX);
 
     // Convert to -1 to 1 range
-    return (adjustedRelativeX * 2) - 1;
+    final alignment = (adjustedRelativeX * 2) - 1;
+    return isRtl ? -alignment : alignment;
   }
 
   // ===========================================================================
@@ -228,15 +237,19 @@ class DraggableIndicatorPhysics {
     required int itemCount,
     double velocityThreshold = 0.5,
     double projectionTime = 0.3,
+    bool isRtl = false,
   }) {
+    // Flip velocity if RTL
+    final effectiveVelocity = isRtl ? -velocityX : velocityX;
+
     // Handle overdrag scenarios
     if (currentRelativeX < 0) return 0;
     if (currentRelativeX > 1) return itemCount - 1;
 
-    if (velocityX.abs() > velocityThreshold) {
+  if (effectiveVelocity.abs() > velocityThreshold) {
       // High velocity - project where we would end up
       final projectedX =
-          (currentRelativeX + velocityX * projectionTime).clamp(0.0, 1.0);
+          (currentRelativeX + effectiveVelocity * projectionTime).clamp(0.0, 1.0);
       var targetIndex =
           (projectedX / itemWidth).round().clamp(0, itemCount - 1);
 
@@ -244,11 +257,11 @@ class DraggableIndicatorPhysics {
       final currentIndex =
           (currentRelativeX / itemWidth).round().clamp(0, itemCount - 1);
 
-      if (velocityX > velocityThreshold &&
+      if (effectiveVelocity > velocityThreshold &&
           targetIndex <= currentIndex &&
           currentIndex < itemCount - 1) {
         targetIndex = currentIndex + 1;
-      } else if (velocityX < -velocityThreshold &&
+      } else if (effectiveVelocity < -velocityThreshold &&
           targetIndex >= currentIndex &&
           currentIndex > 0) {
         targetIndex = currentIndex - 1;

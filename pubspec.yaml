@@ -31,6 +31,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   liquid_glass_renderer: ^0.2.0-dev.4
   motor: ^1.1.0
   vector_graphics: ^1.1.20

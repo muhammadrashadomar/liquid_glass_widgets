@@ -544,7 +544,9 @@ class _GlassBottomBarState extends State<GlassBottomBar> {
 
     // Selective rendering optimization: only render tabs near the indicator
     // Calculate which tabs are affected by the indicator (within +/- 1 tab)
-    final currentTabFloat = ((alignment.x + 1) / 2) * widget.tabs.length;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final normalizedX = isRtl ? (1 - alignment.x) / 2 : (alignment.x + 1) / 2;
+    final currentTabFloat = normalizedX * widget.tabs.length;
     final affectedStart =
         (currentTabFloat - 1).floor().clamp(0, widget.tabs.length - 1);
     final affectedEnd =
@@ -924,11 +926,23 @@ class _TabIndicatorState extends State<_TabIndicator> {
   bool _isDragging = false;
 
   // Current horizontal alignment of the indicator (-1 to 1)
-  late double _xAlign = _computeXAlignmentForTab(widget.tabIndex);
+  late double _xAlign = _computeXAlignmentForTab(
+    widget.tabIndex,
+    isInitial: true,
+  );
 
   // Cached shape to avoid recreation on every animation frame
   late LiquidRoundedSuperellipse _barShape =
       LiquidRoundedSuperellipse(borderRadius: widget.barBorderRadius);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Update alignment when directionality changes (LTR <-> RTL)
+    setState(() {
+      _xAlign = _computeXAlignmentForTab(widget.tabIndex);
+    });
+  }
 
   @override
   void didUpdateWidget(covariant _TabIndicator oldWidget) {
@@ -950,19 +964,34 @@ class _TabIndicatorState extends State<_TabIndicator> {
   }
 
   /// Converts a tab index to horizontal alignment (-1 to 1).
-  double _computeXAlignmentForTab(int tabIndex) {
+  double _computeXAlignmentForTab(int tabIndex, {bool isInitial = false}) {
+    // During initialization, we can't use Directionality.of(context)
+    // because the state isn't attached/built yet.
+    // However, _computeXAlignmentForTab is also called in build() via
+    // targetAlignment, where we can pass the direction.
+    // For late initialization, we check if we're in build or not.
+    bool rtl = false;
+    try {
+      rtl = Directionality.of(context) == TextDirection.rtl;
+    } catch (_) {
+      // Fallback for initial state before build
+    }
+
     return DraggableIndicatorPhysics.computeAlignment(
       tabIndex,
       widget.tabCount,
+      isRtl: rtl,
     );
   }
 
   /// Converts a global drag position to horizontal alignment (-1 to 1).
   double _getAlignmentFromGlobalPosition(Offset globalPosition) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
     return DraggableIndicatorPhysics.getAlignmentFromGlobalPosition(
       globalPosition,
       context,
       widget.tabCount,
+      isRtl: isRtl,
     );
   }
 
@@ -988,8 +1017,9 @@ class _TabIndicatorState extends State<_TabIndicator> {
 
     final box = context.findRenderObject()! as RenderBox;
 
-    // Convert alignment to 0-1 range
-    final currentRelativeX = (_xAlign + 1) / 2;
+    // Convert alignment to 0-1 range (tab order normalized)
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final currentRelativeX = isRtl ? (1 - _xAlign) / 2 : (_xAlign + 1) / 2;
     final tabWidth = 1.0 / widget.tabCount;
 
     // Calculate velocity in relative units
@@ -1003,6 +1033,7 @@ class _TabIndicatorState extends State<_TabIndicator> {
       currentRelativeX: currentRelativeX,
       velocityX: velocityX,
       tabWidth: tabWidth,
+      isRtl: isRtl,
     );
 
     // Update alignment to target tab
@@ -1019,12 +1050,14 @@ class _TabIndicatorState extends State<_TabIndicator> {
     required double currentRelativeX,
     required double velocityX,
     required double tabWidth,
+    bool isRtl = false,
   }) {
     return DraggableIndicatorPhysics.computeTargetIndex(
       currentRelativeX: currentRelativeX,
       velocityX: velocityX,
       itemWidth: tabWidth,
       itemCount: widget.tabCount,
+      isRtl: isRtl,
     );
   }
 
