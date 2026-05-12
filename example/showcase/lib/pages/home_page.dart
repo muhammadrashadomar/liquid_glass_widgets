@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -161,7 +162,7 @@ class _HomePageState extends State<HomePage> {
         GlassButton(
           quality: ShowcaseGlassTheme.premiumQuality,
           settings: ShowcaseGlassTheme.profileButton,
-          icon: Icons.person_outline,
+          icon: Icon(Icons.person_outline),
           iconSize: 22,
           width: 44,
           height: 44,
@@ -197,7 +198,7 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(width: 8),
           GlassButton(
-            icon: Icons.tune,
+            icon: Icon(Icons.tune),
             iconSize: 22,
             height: 48,
             width: 48,
@@ -299,7 +300,7 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       Expanded(
                         child: GlassButton(
-                          icon: Icons.clear,
+                          icon: Icon(Icons.clear),
                           label: 'Clear',
                           height: 40,
                           shape: LiquidRoundedSuperellipse(borderRadius: 12),
@@ -318,7 +319,7 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: GlassButton(
-                          icon: Icons.check,
+                          icon: Icon(Icons.check),
                           label: 'Apply',
                           height: 40,
                           shape: LiquidRoundedSuperellipse(borderRadius: 12),
@@ -585,19 +586,28 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildBottomBar() {
+    const defaultGlassColor = Color(0x3DFFFFFF); // Colors.white24
+    const defaultLightAngle =
+        0.75 * math.pi; // 135° — Apple standard, upper-left
     return Padding(
       padding: const EdgeInsets.only(bottom: 0),
       child: GlassBottomBar(
         verticalPadding: 0,
         horizontalPadding: 8,
         indicatorColor: Colors.black26,
-        // glassSettings: LiquidGlassSettings(blur: 8,
-        //   ambientStrength: 0.5,
-        //   lightAngle: 0.25 * math.pi,
-        //   glassColor: Colors.white24,
-        //   thickness: 30,),
+        glassSettings: LiquidGlassSettings(
+          thickness: 30,
+          blur: 3,
+          chromaticAberration: 0.3,
+          lightIntensity: 0.6,
+          refractiveIndex: 1.59,
+          saturation: 0.7,
+          ambientStrength: 1,
+          lightAngle: defaultLightAngle,
+          glassColor: defaultGlassColor,
+        ),
         extraButton: GlassBottomBarExtraButton(
-          icon: Icons.support_agent,
+          icon: Icon(Icons.support_agent),
           onTap: () {
             Navigator.push(
               context,
@@ -611,18 +621,18 @@ class _HomePageState extends State<HomePage> {
         tabs: [
           GlassBottomBarTab(
             label: 'Explore',
-            icon: Icons.explore_outlined,
-            selectedIcon: Icons.explore,
+            icon: const Icon(Icons.explore_outlined),
+            activeIcon: const Icon(Icons.explore),
           ),
           GlassBottomBarTab(
             label: 'Saved',
-            icon: Icons.favorite_outline,
-            selectedIcon: Icons.favorite,
+            icon: const Icon(Icons.favorite_outline),
+            activeIcon: const Icon(Icons.favorite),
           ),
           GlassBottomBarTab(
             label: 'Trips',
-            icon: Icons.backpack_outlined,
-            selectedIcon: Icons.backpack,
+            icon: const Icon(Icons.backpack_outlined),
+            activeIcon: const Icon(Icons.backpack),
           ),
         ],
         selectedIndex: _selectedTab,

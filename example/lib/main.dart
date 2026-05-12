@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:liquid_glass_widgets_example/constants/glass_settings.dart';
 import 'package:liquid_glass_widgets_example/pages/containers_page.dart';
+import 'package:liquid_glass_widgets_example/pages/feedback_page.dart';
 import 'package:liquid_glass_widgets_example/pages/input_page.dart';
 import 'package:liquid_glass_widgets_example/pages/interactive_page.dart';
 import 'package:liquid_glass_widgets_example/pages/overlays_page.dart';
@@ -16,7 +16,11 @@ void main() async {
   // Initializes the Liquid Glass library.
   await LiquidGlassWidgets.initialize();
 
-  runApp(const AppleLiquidGlassShowcaseApp());
+  // wrap() puts a GlassBackdropScope at the root so every glass surface in the
+  // app (GlassBottomBar, GlassAppBar, GlassCard, etc.) shares a single GPU
+  // backdrop capture on Impeller — halving blit cost when multiple surfaces
+  // are visible at once. On Skia/Web it is a no-op.
+  runApp(LiquidGlassWidgets.wrap(child: const AppleLiquidGlassShowcaseApp()));
 }
 
 class AppleLiquidGlassShowcaseApp extends StatelessWidget {
@@ -24,58 +28,20 @@ class AppleLiquidGlassShowcaseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _AppScope(
-      builder: (context, locale) => MaterialApp(
-        title: 'Apple Liquid Glass Showcase',
-        locale: const Locale('ar', ''),
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [
-          Locale('ar', ''),
-          Locale('en', ''),
-        ],
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          useMaterial3: true,
-          colorScheme: ColorScheme.dark(
-            primary: Colors.blue,
-            surface: Colors.black,
-          ),
+    return MaterialApp(
+      title: 'Apple Liquid Glass Showcase',
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        useMaterial3: true,
+        colorScheme: ColorScheme.dark(
+          primary: Colors.blue,
+          surface: Colors.black,
         ),
-        home: const ShowcaseHomePage(),
-        debugShowCheckedModeBanner: false,
       ),
+      home: const ShowcaseHomePage(),
+      debugShowCheckedModeBanner: false,
     );
   }
-}
-
-class _AppScope extends StatefulWidget {
-  const _AppScope({required this.builder});
-  final Widget Function(BuildContext, Locale) builder;
-
-  static _AppScopeState of(BuildContext context) =>
-      context.findAncestorStateOfType<_AppScopeState>()!;
-
-  @override
-  State<_AppScope> createState() => _AppScopeState();
-}
-
-class _AppScopeState extends State<_AppScope> {
-  Locale _locale = const Locale('en');
-
-  void toggleLocale() {
-    setState(() {
-      _locale = _locale.languageCode == 'en'
-          ? const Locale('ar')
-          : const Locale('en');
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.builder(context, _locale);
 }
 
 class ShowcaseHomePage extends StatefulWidget {
@@ -92,7 +58,7 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
     HomePage(),
     ContainersPage(),
     InteractivePage(),
-    // FeedbackPage(),
+    FeedbackPage(),
     OverlaysPage(),
     SurfacesPage(),
     InputPage(),
@@ -123,37 +89,37 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
             tabs: [
               GlassBottomBarTab(
                 label: 'Home',
-                icon: CupertinoIcons.home,
-                selectedIcon: CupertinoIcons.house_fill,
+                icon: const Icon(CupertinoIcons.home),
+                activeIcon: const Icon(CupertinoIcons.house_fill),
               ),
               GlassBottomBarTab(
                 label: 'Containers',
-                icon: CupertinoIcons.square_stack_3d_up,
-                selectedIcon: CupertinoIcons.square_stack_3d_up_fill,
+                icon: const Icon(CupertinoIcons.square_stack_3d_up),
+                activeIcon: const Icon(CupertinoIcons.square_stack_3d_up_fill),
               ),
               GlassBottomBarTab(
                 label: 'Interactive',
-                icon: CupertinoIcons.hand_point_right,
-                selectedIcon: CupertinoIcons.hand_point_right_fill,
+                icon: const Icon(CupertinoIcons.hand_point_right),
+                activeIcon: const Icon(CupertinoIcons.hand_point_right_fill),
               ),
-              // GlassBottomBarTab(
-              //   label: 'Feedback',
-              //   icon: CupertinoIcons.hourglass,
-              //   selectedIcon: CupertinoIcons.hourglass,
-              // ),
+              GlassBottomBarTab(
+                label: 'Feedback',
+                icon: const Icon(CupertinoIcons.hourglass),
+                activeIcon: const Icon(CupertinoIcons.hourglass),
+              ),
               GlassBottomBarTab(
                 label: 'Overlays',
-                icon: CupertinoIcons.square_stack,
-                selectedIcon: CupertinoIcons.square_stack_fill,
+                icon: const Icon(CupertinoIcons.square_stack),
+                activeIcon: const Icon(CupertinoIcons.square_stack_fill),
               ),
               GlassBottomBarTab(
                 label: 'Surfaces',
-                icon: CupertinoIcons.rectangle_3_offgrid,
-                selectedIcon: CupertinoIcons.rectangle_3_offgrid_fill,
+                icon: const Icon(CupertinoIcons.rectangle_3_offgrid),
+                activeIcon: const Icon(CupertinoIcons.rectangle_3_offgrid_fill),
               ),
               GlassBottomBarTab(
                 label: 'Input',
-                icon: CupertinoIcons.keyboard,
+                icon: const Icon(CupertinoIcons.keyboard),
               ),
             ],
             selectedIndex: _selectedIndex,
@@ -163,17 +129,13 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
               });
             },
             // extraButton: GlassBottomBarExtraButton(
-            //   icon: CupertinoIcons.rectangle_3_offgrid_fill,
+            //   icon: Icon(CupertinoIcons.rectangle_3_offgrid_fill),
             //   iconColor: Colors.amber,
             //   onTap: () {
             //
             //   },
             //   label: 'AI Chat',
             // ),
-          ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () => _AppScope.of(context).toggleLocale(),
-            child: const Icon(Icons.language),
           ),
         ),
       ),
@@ -279,7 +241,7 @@ class HomePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     _CategoryCard(
-                      icon: CupertinoIcons.square_stack_3d_up_fill,
+                      icon: Icon(CupertinoIcons.square_stack_3d_up_fill),
                       title: 'Containers',
                       description:
                           'GlassCard, GlassPanel, and GlassContainer for content',
@@ -287,7 +249,7 @@ class HomePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _CategoryCard(
-                      icon: CupertinoIcons.hand_point_right_fill,
+                      icon: Icon(CupertinoIcons.hand_point_right_fill),
                       title: 'Interactive',
                       description:
                           'GlassButton, GlassSwitch, and GlassSegmentedControl',
@@ -295,7 +257,7 @@ class HomePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _CategoryCard(
-                      icon: CupertinoIcons.hourglass,
+                      icon: Icon(CupertinoIcons.hourglass),
                       title: 'Feedback',
                       description:
                           'GlassProgressIndicator for loading and progress',
@@ -303,7 +265,7 @@ class HomePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _CategoryCard(
-                      icon: CupertinoIcons.square_stack_fill,
+                      icon: Icon(CupertinoIcons.square_stack_fill),
                       title: 'Overlays',
                       description:
                           'GlassSheet for modal dialogs and bottom sheets',
@@ -311,7 +273,7 @@ class HomePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _CategoryCard(
-                      icon: CupertinoIcons.rectangle_3_offgrid_fill,
+                      icon: Icon(CupertinoIcons.rectangle_3_offgrid_fill),
                       title: 'Surfaces',
                       description:
                           'GlassAppBar and GlassBottomBar for navigation',
@@ -319,7 +281,7 @@ class HomePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     const _CategoryCard(
-                      icon: CupertinoIcons.keyboard,
+                      icon: Icon(CupertinoIcons.keyboard),
                       title: 'Input',
                       description: 'GlassTextField for text input',
                       color: Colors.pink,
@@ -344,7 +306,7 @@ class _CategoryCard extends StatelessWidget {
     required this.color,
   });
 
-  final IconData icon;
+  final Widget icon;
   final String title;
   final String description;
   final Color color;
@@ -362,11 +324,7 @@ class _CategoryCard extends StatelessWidget {
               color: color.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 28,
-            ),
+            child: icon,
           ),
           const SizedBox(width: 16),
           Expanded(

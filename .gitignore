@@ -97,3 +97,52 @@ app.*.symbols
 *.tmp
 *.temp
 .DS_Store
+
+# AI agent working/planning notes (not for repo)
+.agent/
+
+# Test golden failure/diff images
+test/golden/**/failures/
+
+# Root-level planning docs
+RENDERER_IMPROVEMENT_PLAN.md
+
+# Example app — generated platform folders (not needed for a package example)
+example/android/
+example/ios/
+example/macos/
+example/web/
+example/.metadata
+example/showcase/ios/
+
+# Example app — AI working docs
+example/ENHANCED_APP_SUMMARY.md
+example/EVALUATION_CHECKLIST.md
+example/showcase/IMAGE_GUIDE.md
+example/showcase/QUICKSTART.md
+example/showcase/SHOWCASE_SUMMARY.md
+
+# Root-level scratch/debug scripts and output (not for repo)
+test_output.txt
+test_output.log
+test_output2.log
+update_demo.py
+update_glow.py
+test/widgets/surfaces/debug_searchable_test.dart
+test/widgets/surfaces/indicator_z_order_test.dart
+
+# Modal sheet showcase - Generated platforms and tools
+modal_sheet_showcase/android/
+modal_sheet_showcase/ios/
+modal_sheet_showcase/macos/
+modal_sheet_showcase/web/
+modal_sheet_showcase/linux/
+modal_sheet_showcase/windows/
+modal_sheet_showcase/.metadata
+modal_sheet_showcase/.idea/
+modal_sheet_showcase/*.iml
+modal_sheet_showcase/build/
+modal_sheet_showcase/.dart_tool/
+modal_sheet_showcase/.flutter-plugins
+modal_sheet_showcase/.flutter-plugins-dependencies
+modal_sheet_showcase/pubspec.lock

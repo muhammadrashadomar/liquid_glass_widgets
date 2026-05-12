@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
-
+import '../../src/renderer/liquid_glass_renderer.dart';
+import '../../theme/glass_theme_helpers.dart';
 import '../../types/glass_quality.dart';
 import '../shared/adaptive_glass.dart';
 import '../shared/adaptive_liquid_glass_layer.dart';
-import '../shared/inherited_liquid_glass.dart';
 
 /// A glass morphism toolbar following Apple's iOS 26 design patterns.
 ///
@@ -121,11 +120,11 @@ class GlassToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Inherit quality from parent layer if not explicitly set
-    final inherited =
-        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
-    final effectiveQuality =
-        quality ?? inherited?.quality ?? GlassQuality.premium;
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: quality,
+      fallback: GlassQuality.premium,
+    );
 
     // Standard iOS toolbar glass settings with high blur
     final effectiveSettings = glassSettings ?? _defaultSettings;

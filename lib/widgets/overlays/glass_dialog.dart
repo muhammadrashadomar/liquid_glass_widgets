@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../../src/renderer/liquid_glass_renderer.dart';
 
 import '../../types/glass_quality.dart';
 import '../containers/glass_card.dart';
 import '../interactive/glass_button.dart';
 import '../shared/adaptive_liquid_glass_layer.dart';
-import '../shared/inherited_liquid_glass.dart';
+import '../../theme/glass_theme_helpers.dart';
 
 /// A glass morphism alert dialog following Apple's iOS design patterns.
 ///
@@ -288,10 +288,10 @@ class GlassDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Inherit quality from parent layer if not explicitly set
-    final inherited =
-        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
-    final effectiveQuality =
-        quality ?? inherited?.quality ?? GlassQuality.standard;
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: quality,
+    );
 
     return Dialog(
       backgroundColor: Colors.transparent,

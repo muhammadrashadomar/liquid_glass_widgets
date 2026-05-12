@@ -26,37 +26,45 @@ precision highp float;
 // -----------------------------------------------------------------------------
 // UNIFORMS
 // -----------------------------------------------------------------------------
-uniform vec2 uSize;                 // Widget size in logical pixels
-uniform vec2 uOrigin;               // Origin offset (usually 0,0 due to layers)
-uniform vec4 uGlassColor;           // Tint color for the glass
-uniform float uThickness;           // Glass thickness (affects visual weight)
-uniform vec2 uLightDirection;      // Pre-calculated light vector [cos(angle), -sin(angle)]
-uniform float uLightIntensity;      // Brightness of rim highlights (0-2)
-uniform float uAmbientStrength;     // Base ambient brightness
-uniform float uSaturation;          // Color saturation
-uniform float uRefractiveIndex;     // Rim prominence
-uniform float uChromaticAberration; // RGB separation strength (0-1)
-uniform float uCornerRadius;        // Pill corner radius in logical pixels
-uniform vec2 uScale;                // Device scale (usually 1,1 in layer)
-uniform float uGlowIntensity;       // Interactive glow when pressed
-uniform float uDensityFactor;       // Visual density for nested glass
-uniform float uInteractionIntensity;// Press/drag intensity (0-1)
-uniform vec2 uBackgroundOrigin;     // Widget position in background (logical px)
-uniform vec2 uBackgroundSize;       // Background texture size (logical px)
-uniform float uHasBackground;       // 1.0 = use texture, 0.0 = use synthetic frost
-
-// Configurable appearance parameters
-uniform float uAmbientRim;          // Minimum rim brightness (default: 0.1)
-uniform float uBaseAlphaMultiplier; // Center transparency multiplier (default: 0.2)
-uniform float uEdgeAlphaMultiplier; // Edge opacity multiplier (default: 0.4)
-uniform float uRimThickness;       // Rim offset/thickness (default: 0.5)
-uniform float uRimSmoothing;       // Rim edge smoothing multiplier (default: 1.5)
+// We pack uniforms into vec4s to avoid Metal's 14 constant buffer limit on the iOS Simulator.
+uniform vec4 uData0; // 0..3 (size.x, size.y, origin.x, origin.y)
+uniform vec4 uData1; // 4..7 (glassColor)
+uniform vec4 uData2; // 8..11 (thickness, lightDir.x, lightDir.y, lightIntensity)
+uniform vec4 uData3; // 12..15 (ambientStrength, saturation, refractiveIndex, chromaticAberration)
+uniform vec4 uData4; // 16..19 (cornerRadius, scale.x, scale.y, glowIntensity)
+uniform vec4 uData5; // 20..23 (densityFactor, interactionIntensity, bgOrigin.x, bgOrigin.y)
+uniform vec4 uData6; // 24..27 (bgSize.width, bgSize.height, hasBackground, ambientRim)
+uniform vec4 uData7; // 28..31 (baseAlphaMultiplier, edgeAlphaMultiplier, rimThickness, rimSmoothing)
 
 uniform sampler2D uTexture;         // Captured background image
 
 out vec4 fragColor;
 
 void main() {
+  vec2 uSize = uData0.xy;
+  vec2 uOrigin = uData0.zw;
+  vec4 uGlassColor = uData1;
+  float uThickness = uData2.x;
+  vec2 uLightDirection = uData2.yz;
+  float uLightIntensity = uData2.w;
+  float uAmbientStrength = uData3.x;
+  float uSaturation = uData3.y;
+  float uRefractiveIndex = uData3.z;
+  float uChromaticAberration = uData3.w;
+  float uCornerRadius = uData4.x;
+  vec2 uScale = uData4.yz;
+  float uGlowIntensity = uData4.w;
+  float uDensityFactor = uData5.x;
+  float uInteractionIntensity = uData5.y;
+  vec2 uBackgroundOrigin = uData5.zw;
+  vec2 uBackgroundSize = uData6.xy;
+  float uHasBackground = uData6.z;
+  float uAmbientRim = uData6.w;
+  float uBaseAlphaMultiplier = uData7.x;
+  float uEdgeAlphaMultiplier = uData7.y;
+  float uRimThickness = uData7.z;
+  float uRimSmoothing = uData7.w;
+
   // ==========================================================================
   // COORDINATE SETUP
   // ==========================================================================
@@ -99,7 +107,10 @@ void main() {
   vec2 closestOnSkeleton = clamp(p, -innerHalfSize, innerHalfSize);
   vec2 toEdge = p - closestOnSkeleton;
   float edgeLen = length(toEdge);
-  vec2 surfaceNormal = (edgeLen > 0.001) ? normalize(toEdge) : vec2(0.0);
+  // Reuse edgeLen for the division — normalize(toEdge) would recompute length()
+  // internally. Dividing by the already-computed scalar saves one length() call
+  // per fragment in the surface normal path.
+  vec2 surfaceNormal = (edgeLen > 0.001) ? (toEdge / edgeLen) : vec2(0.0);
   
   // ==========================================================================
   // BACKGROUND REFRACTION (THE MAIN EFFECT)
@@ -146,8 +157,15 @@ void main() {
   vec2 edgeOffsetLogical = surfaceNormal * edgeInfluence * bendStrength * uSize.y * 0.35;
   vec2 edgeOffsetUV = edgeOffsetLogical / uBackgroundSize;
   
-  // Apply refraction offset (subtract because we bend inward)
-  vec2 localRefracted = posInBg - edgeOffsetLogical;
+  // Apply refraction offset along the surface normal.
+  // On OpenGL ES the background texture is stored with a bottom-left Y origin,
+  // so edgeOffsetLogical.y (computed in Flutter's Y-down space) must be
+  // negated to sample in the correct outward direction in the Y-up UV space.
+  #ifdef IMPELLER_TARGET_OPENGLES
+    vec2 localRefracted = posInBg + vec2(edgeOffsetLogical.x, -edgeOffsetLogical.y);
+  #else
+    vec2 localRefracted = posInBg - edgeOffsetLogical;
+  #endif
   
   // --------------------------------------------------------------------------
   // CHROMATIC ABERRATION
@@ -161,11 +179,17 @@ void main() {
   
   vec3 bg;
   if (uHasBackground > 0.5) {
-    // REAL REFRACTION: Sample from captured background
-    vec3 colR = texture(uTexture, (localRefracted + chromaticShift) / uBackgroundSize).rgb;
-    vec3 colG = texture(uTexture, localRefracted / uBackgroundSize).rgb;
-    vec3 colB = texture(uTexture, (localRefracted - chromaticShift) / uBackgroundSize).rgb;
-    bg = vec3(colR.r, colG.g, colB.b);
+    if (uChromaticAberration < 0.001) {
+      // No chromatic aberration — single texture fetch (2/3 fewer samples vs
+      // the 3-channel path). This is the common default configuration.
+      bg = texture(uTexture, localRefracted / uBackgroundSize).rgb;
+    } else {
+      // REAL REFRACTION with chromatic aberration: separate RGB channels
+      vec3 colR = texture(uTexture, (localRefracted + chromaticShift) / uBackgroundSize).rgb;
+      vec3 colG = texture(uTexture, localRefracted / uBackgroundSize).rgb;
+      vec3 colB = texture(uTexture, (localRefracted - chromaticShift) / uBackgroundSize).rgb;
+      bg = vec3(colR.r, colG.g, colB.b);
+    }
   } else {
     // SYNTHETIC LIQUID: Bright clear base with subtle tint
     // We use a high base color (0.9) to ensure it looks like pure glass
@@ -177,7 +201,9 @@ void main() {
   
   // Key light: bright highlight on edges facing the light
   // TWEAK: pow exponent (8.0) controls sharpness - higher = tighter highlight
-  float keyHighlight = pow(max(edgeLightCatch, 0.0), 8.0) * uLightIntensity * 2.0;
+  // NOTE: Using * 0.5 (same scale as kickHighlight) to avoid an over-bright "dot"
+  // at the pill corner where the light direction perfectly aligns with the corner normal.
+  float keyHighlight = pow(max(edgeLightCatch, 0.0), 8.0) * uLightIntensity * 0.5;
   
   // Kick light: subtle highlight on opposite edge (back-reflection)
   // TWEAK: pow exponent (12.0) is higher for tighter back-reflection

@@ -1,8 +1,4 @@
-@Tags(['golden'])
-library;
-
 import 'package:alchemist/alchemist.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/widgets/interactive/glass_button.dart';
 import 'package:liquid_glass_widgets/widgets/interactive/glass_chip.dart';
 import 'package:liquid_glass_widgets/widgets/interactive/glass_icon_button.dart';
@@ -30,7 +26,7 @@ void main() {
             AdaptiveLiquidGlassLayer(
               settings: defaultTestGlassSettings,
               child: GlassButton(
-                icon: CupertinoIcons.heart,
+                icon: Icon(CupertinoIcons.heart),
                 onTap: () {},
               ),
             ),
@@ -42,7 +38,7 @@ void main() {
             AdaptiveLiquidGlassLayer(
               settings: defaultTestGlassSettings,
               child: GlassButton(
-                icon: CupertinoIcons.heart,
+                icon: Icon(CupertinoIcons.heart),
                 onTap: () {},
                 enabled: false,
               ),
@@ -83,7 +79,7 @@ void main() {
             AdaptiveLiquidGlassLayer(
               settings: defaultTestGlassSettings,
               child: GlassIconButton(
-                icon: Icons.favorite,
+                icon: Icon(Icons.favorite),
                 onPressed: () {},
               ),
             ),
@@ -95,7 +91,7 @@ void main() {
             AdaptiveLiquidGlassLayer(
               settings: defaultTestGlassSettings,
               child: GlassIconButton(
-                icon: Icons.settings,
+                icon: Icon(Icons.settings),
                 onPressed: () {},
                 shape: GlassIconButtonShape.roundedSquare,
               ),
@@ -108,7 +104,7 @@ void main() {
             AdaptiveLiquidGlassLayer(
               settings: defaultTestGlassSettings,
               child: GlassIconButton(
-                icon: Icons.delete,
+                icon: Icon(Icons.delete),
                 onPressed: null,
               ),
             ),
@@ -165,7 +161,7 @@ void main() {
           child: buildWithGradientBackground(
             AdaptiveLiquidGlassLayer(
               settings: defaultTestGlassSettings,
-              child: const GlassChip(
+              child: GlassChip(
                 label: 'Flutter',
               ),
             ),
@@ -176,9 +172,9 @@ void main() {
           child: buildWithGradientBackground(
             AdaptiveLiquidGlassLayer(
               settings: defaultTestGlassSettings,
-              child: const GlassChip(
+              child: GlassChip(
                 label: 'Favorite',
-                icon: CupertinoIcons.heart_fill,
+                icon: Icon(CupertinoIcons.heart_fill),
               ),
             ),
           ),

@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../../src/renderer/liquid_glass_renderer.dart';
 
+import '../../constants/glass_defaults.dart';
+import '../../src/types/glass_interaction_behavior.dart';
 import '../../types/glass_quality.dart';
 import '../../utils/draggable_indicator_physics.dart';
 import '../shared/glass_effect.dart';
-import '../shared/inherited_liquid_glass.dart';
+import '../../theme/glass_theme_helpers.dart';
 
 /// A glass morphism slider following Apple's iOS 26 design patterns.
 ///
@@ -119,6 +121,10 @@ class GlassSlider extends StatefulWidget {
     this.settings,
     this.useOwnLayer = false,
     this.quality,
+    // ── iOS 26 interaction ──────────────────────────────────────────────────────
+    this.interactionBehavior = GlassInteractionBehavior.full,
+    this.glowColor,
+    this.glowRadius = 1.5,
   });
 
   // ===========================================================================
@@ -209,6 +215,31 @@ class GlassSlider extends StatefulWidget {
   /// Defaults to [GlassQuality.standard].
   final GlassQuality? quality;
 
+  // ── iOS 26 interaction ────────────────────────────────────────────────────
+
+  /// Controls which iOS 26 interaction effects are active on the thumb.
+  ///
+  /// | Value | Glow on drag |
+  /// |---|---|
+  /// | `none` | ✗ |
+  /// | `glowOnly` | ✓ |
+  /// | `scaleOnly` | ✗ |
+  /// | `full` *(default)* | ✓ |
+  ///
+  /// Set to [GlassInteractionBehavior.none] to suppress the drag glow entirely.
+  final GlassInteractionBehavior interactionBehavior;
+
+  /// Colour of the drag glow on the thumb.
+  ///
+  /// Only active when [interactionBehavior] includes glow. Defaults to a
+  /// soft white (~12% opacity) — same as [GlassTextField].
+  final Color? glowColor;
+
+  /// Spread radius of the drag glow relative to the thumb’s shorter dimension.
+  ///
+  /// Defaults to `1.5` (150% of thumb height), matching [GlassTextField].
+  final double glowRadius;
+
   @override
   State<GlassSlider> createState() => _GlassSliderState();
 }
@@ -249,9 +280,10 @@ class _GlassSliderState extends State<GlassSlider>
       ),
     );
 
-    // Thickness controller for glass overlay visibility (iOS 26 liquid glass)
+    // Simple 0→1 hold: fades the white pill out on press-down and
+    // keeps it clear for the entire drag. Reverses back on release.
     _thicknessController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     );
 
@@ -287,6 +319,7 @@ class _GlassSliderState extends State<GlassSlider>
       _velocity = Offset.zero;
     });
     unawaited(_scaleController.forward());
+    // Fade the white pill out; stays clear for the whole drag
     unawaited(_thicknessController.forward());
   }
 
@@ -353,7 +386,7 @@ class _GlassSliderState extends State<GlassSlider>
     // Scale down thumb when ending drag
     unawaited(_scaleController.reverse());
 
-    // Hide glass overlay
+    // Fade the white pill back in on release
     unawaited(_thicknessController.reverse());
   }
 
@@ -362,11 +395,11 @@ class _GlassSliderState extends State<GlassSlider>
 
   @override
   Widget build(BuildContext context) {
-    // Inherit quality from parent layer if not explicitly set
-    final inherited =
-        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
-    _effectiveQuality =
-        widget.quality ?? inherited?.quality ?? GlassQuality.standard;
+    // Inherit quality from parent layer or theme if not explicitly set
+    _effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: widget.quality,
+    );
 
     final effectiveValue = _dragValue ?? widget.value;
     final normalizedValue =
@@ -574,11 +607,14 @@ class _GlassSliderState extends State<GlassSlider>
             ),
           ),
 
-          // Glowing element (always present when transition > 0, controlled by opacity)
-          if (transition > 0.05)
+          // Glowing element — only when interactionBehavior includes glow.
+          if (transition > 0.05 && widget.interactionBehavior.hasGlow)
             Opacity(
               opacity: transition,
               child: GlassGlow(
+                glowColor:
+                    widget.glowColor ?? const Color(0x1FFFFFFF), // white ~12%
+                glowRadius: widget.glowRadius,
                 child: SizedBox(
                   width: thumbWidth,
                   height: thumbHeight,
@@ -605,7 +641,7 @@ class _GlassSliderState extends State<GlassSlider>
                 thickness: 20,
                 lightIntensity: 2.0,
                 blur: 0,
-                lightAngle: 135,
+                lightAngle: GlassDefaults.lightAngle, // Apple iOS 26 standard
               )
             : const LiquidGlassSettings(
                 glassColor: Color.from(alpha: 0.1, red: 1, green: 1, blue: 1),
@@ -613,7 +649,7 @@ class _GlassSliderState extends State<GlassSlider>
                 thickness: 10,
                 lightIntensity: 2,
                 blur: 0,
-                lightAngle: 120,
+                lightAngle: GlassDefaults.lightAngle, // Apple iOS 26 standard
               );
 
     // CRITICAL: Outer SizedBox with dynamic size ensures proper premium rendering

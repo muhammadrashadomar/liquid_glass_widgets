@@ -24,7 +24,7 @@ void main() async {
     ),
   );
 
-  runApp(const WanderlustApp());
+  runApp(LiquidGlassWidgets.wrap(child: const WanderlustApp()));
 }
 
 class WanderlustApp extends StatelessWidget {

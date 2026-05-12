@@ -103,7 +103,13 @@ class DraggableIndicatorPhysics {
     double velocityScale = 1000.0,
   }) {
     final speed = velocity.distance;
-    if (speed == 0) return Matrix4.identity();
+    if (speed == 0 || !speed.isFinite) {
+      // speed == 0: no movement, avoid division by zero.
+      // !isFinite: NaN or Infinity from synthetic/custom velocity — fall back
+      // to a neutral transform. Keep a sub-pixel translation so the
+      // TransformLayer stays mounted and avoids edge-snapping artifacts.
+      return Matrix4.identity()..translate(0.0001, 0.0);
+    }
 
     // Normalize velocity direction
     final direction = velocity / speed;
@@ -124,7 +130,12 @@ class DraggableIndicatorPhysics {
     final scaleX = squashX * stretchX;
     final scaleY = squashY * stretchY;
 
-    return Matrix4.identity()..scale(scaleX, scaleY);
+    final matrix = Matrix4.identity()..scale(scaleX, scaleY);
+    if (matrix.isIdentity()) {
+      // Catch floating-point rounding rendering drops when speed is > 0 but microscopic
+      matrix.translate(0.0001, 0.0);
+    }
+    return matrix;
   }
 
   // ===========================================================================
@@ -148,7 +159,8 @@ class DraggableIndicatorPhysics {
   /// computeAlignment(1, 3) // Returns  0.0 (center)
   /// computeAlignment(2, 3) // Returns  1.0 (right)
   /// ```
-  static double computeAlignment(int index, int itemCount, {bool isRtl = false}) {
+  static double computeAlignment(int index, int itemCount,
+      {bool isRtl = false}) {
     final relativeIndex = (index / (itemCount - 1)).clamp(0.0, 1.0);
     final alignment = (relativeIndex * 2) - 1;
     return isRtl ? -alignment : alignment;
@@ -246,10 +258,14 @@ class DraggableIndicatorPhysics {
     if (currentRelativeX < 0) return 0;
     if (currentRelativeX > 1) return itemCount - 1;
 
-  if (effectiveVelocity.abs() > velocityThreshold) {
+    // Guard against NaN / Infinity from synthetic or injected velocity values.
+    // Fall through to nearest-item snap rather than projecting an invalid position.
+    final safeVelocityX = velocityX.isFinite ? velocityX : 0.0;
+
+    if (safeVelocityX.abs() > velocityThreshold) {
       // High velocity - project where we would end up
       final projectedX =
-          (currentRelativeX + effectiveVelocity * projectionTime).clamp(0.0, 1.0);
+          (currentRelativeX + safeVelocityX * projectionTime).clamp(0.0, 1.0);
       var targetIndex =
           (projectedX / itemWidth).round().clamp(0, itemCount - 1);
 
@@ -257,11 +273,11 @@ class DraggableIndicatorPhysics {
       final currentIndex =
           (currentRelativeX / itemWidth).round().clamp(0, itemCount - 1);
 
-      if (effectiveVelocity > velocityThreshold &&
+      if (safeVelocityX > velocityThreshold &&
           targetIndex <= currentIndex &&
           currentIndex < itemCount - 1) {
         targetIndex = currentIndex + 1;
-      } else if (effectiveVelocity < -velocityThreshold &&
+      } else if (safeVelocityX < -velocityThreshold &&
           targetIndex >= currentIndex &&
           currentIndex > 0) {
         targetIndex = currentIndex - 1;

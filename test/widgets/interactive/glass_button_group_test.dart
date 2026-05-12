@@ -16,12 +16,12 @@ void main() {
               child: GlassButtonGroup(
                 children: [
                   GlassButton(
-                    icon: CupertinoIcons.back,
+                    icon: Icon(CupertinoIcons.back),
                     style: GlassButtonStyle.transparent,
                     onTap: () => tappedIndex = 0,
                   ),
                   GlassButton(
-                    icon: CupertinoIcons.forward,
+                    icon: Icon(CupertinoIcons.forward),
                     style: GlassButtonStyle.transparent,
                     onTap: () => tappedIndex = 1,
                   ),
@@ -57,7 +57,7 @@ void main() {
         home: Scaffold(
           body: AdaptiveLiquidGlassLayer(
             child: GlassButton(
-              icon: CupertinoIcons.add,
+              icon: Icon(CupertinoIcons.add),
               style: GlassButtonStyle.transparent,
               onTap: () {},
             ),
@@ -69,5 +69,39 @@ void main() {
     expect(find.byIcon(CupertinoIcons.add), findsOneWidget);
     // Should NOT find LiquidGlass widget internally if we could check,
     // but verifying it pumps without error is key.
+  });
+
+  // ── Vertical direction (line 97: Container height divider) ──────────────────
+  testWidgets('GlassButtonGroup vertical direction renders height dividers',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AdaptiveLiquidGlassLayer(
+            child: Center(
+              child: GlassButtonGroup(
+                direction:
+                    Axis.vertical, // exercises line 97: Container(height:1)
+                children: [
+                  GlassButton(
+                    icon: Icon(CupertinoIcons.up_arrow),
+                    style: GlassButtonStyle.transparent,
+                    onTap: () {},
+                  ),
+                  GlassButton(
+                    icon: Icon(CupertinoIcons.down_arrow),
+                    style: GlassButtonStyle.transparent,
+                    onTap: () {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(CupertinoIcons.up_arrow), findsOneWidget);
+    expect(find.byIcon(CupertinoIcons.down_arrow), findsOneWidget);
   });
 }

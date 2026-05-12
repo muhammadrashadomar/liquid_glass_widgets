@@ -1,8 +1,4 @@
-@Tags(['golden'])
-library;
-
 import 'package:alchemist/alchemist.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/widgets/containers/glass_card.dart';
 import 'package:liquid_glass_widgets/widgets/containers/glass_container.dart';
 import 'package:liquid_glass_widgets/widgets/containers/glass_panel.dart';

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
-import 'package:motor/motor.dart';
+import '../../src/renderer/liquid_glass_renderer.dart';
 
 import '../../types/glass_quality.dart';
-import '../../utils/draggable_indicator_physics.dart';
 import '../shared/adaptive_liquid_glass_layer.dart';
-import '../shared/animated_glass_indicator.dart';
 import '../shared/inherited_liquid_glass.dart';
+import '../../theme/glass_theme_helpers.dart';
+import 'glass_bottom_bar.dart' show MaskingQuality;
+import 'shared/tab_bar_internal.dart';
 
 /// A glass morphism tab bar following Apple's iOS design patterns.
 ///
@@ -47,9 +47,9 @@ import '../shared/inherited_liquid_glass.dart';
 /// GlassTabBar(
 ///   height: 56, // Taller for icon + label
 ///   tabs: [
-///     GlassTab(icon: Icons.home, label: 'Home'),
-///     GlassTab(icon: Icons.search, label: 'Search'),
-///     GlassTab(icon: Icons.person, label: 'Profile'),
+///     GlassTab(icon: Icon(Icons.home), label: 'Home'),
+///     GlassTab(icon: Icon(Icons.search), label: 'Search'),
+///     GlassTab(icon: Icon(Icons.person), label: 'Profile'),
 ///   ],
 ///   selectedIndex: _selectedIndex,
 ///   onTabSelected: (index) => setState(() => _selectedIndex = index),
@@ -119,6 +119,9 @@ class GlassTabBar extends StatefulWidget {
     this.indicatorBorderRadius,
     this.indicatorSettings,
     this.backgroundKey,
+    this.maskingQuality = MaskingQuality.high,
+    this.dividerSettings,
+    this.indicatorShadow,
   })  : assert(tabs.length >= 2, 'GlassTabBar requires at least 2 tabs'),
         assert(
           selectedIndex >= 0 && selectedIndex < tabs.length,
@@ -182,6 +185,17 @@ class GlassTabBar extends StatefulWidget {
   /// [GlassQuality.standard].
   final GlassQuality? quality;
 
+  /// Controls indicator clipping quality.
+  ///
+  /// - [MaskingQuality.high] (default): Full jelly-bloom physics — the
+  ///   indicator expands 8 px beyond its pill bounds for the iOS 26 spring
+  ///   effect. Uses a dual-layer [GlassBottomBarClipper] path.
+  /// - [MaskingQuality.off]: Simple clipping with no jelly expansion.
+  ///   Cheaper on GPU; useful for low-end devices or accessibility modes.
+  ///
+  /// Mirrors the same parameter on [GlassBottomBar] for a consistent API.
+  final MaskingQuality maskingQuality;
+
   /// BorderRadius of the tab bar.
   final BorderRadius? borderRadius;
 
@@ -193,6 +207,28 @@ class GlassTabBar extends StatefulWidget {
 
   /// Optional background key for Skia/Web refraction.
   final GlobalKey? backgroundKey;
+
+  /// Settings for the vertical dividers between segments.
+  final DividerSettings? dividerSettings;
+
+  /// Optional shadows for the active indicator pill.
+  ///
+  /// Applied only when the pill is idle (solid color) — automatically
+  /// suppressed during the liquid glass drag animation so it does not
+  /// interact with the BackdropFilter blur. Useful for improving contrast
+  /// in light-mode themes where the pill and track share similar colours.
+  ///
+  /// Example:
+  /// ```dart
+  /// indicatorShadow: [
+  ///   BoxShadow(
+  ///     color: Colors.black.withOpacity(0.12),
+  ///     blurRadius: 4,
+  ///     offset: Offset(0, 1),
+  ///   ),
+  /// ]
+  /// ```
+  final List<BoxShadow>? indicatorShadow;
 
   @override
   State<GlassTabBar> createState() => _GlassTabBarState();
@@ -213,29 +249,6 @@ class _GlassTabBarState extends State<GlassTabBar> {
   @override
   void didUpdateWidget(GlassTabBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    if (widget.isScrollable &&
-        oldWidget.selectedIndex != widget.selectedIndex) {
-      _scrollToIndex(widget.selectedIndex);
-    }
-  }
-
-  void _scrollToIndex(int index) {
-    if (!_scrollController.hasClients) return;
-
-    final estimatedTabWidth = widget.isScrollable ? 120.0 : 100.0;
-    final targetScroll = index * estimatedTabWidth;
-    final viewportWidth = _scrollController.position.viewportDimension;
-    final currentScroll = _scrollController.offset;
-
-    if (targetScroll < currentScroll ||
-        targetScroll > currentScroll + viewportWidth - estimatedTabWidth) {
-      _scrollController.animateTo(
-        targetScroll - (viewportWidth - estimatedTabWidth) / 2,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
   }
 
   // Cache default glass settings to avoid allocations on every build
@@ -250,10 +263,10 @@ class _GlassTabBarState extends State<GlassTabBar> {
   @override
   Widget build(BuildContext context) {
     // Inherit quality from parent layer if not explicitly set
-    final inherited =
-        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
-    final effectiveQuality =
-        widget.quality ?? inherited?.quality ?? GlassQuality.standard;
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: widget.quality,
+    );
 
     final glassSettings = widget.settings ?? _defaultGlassSettings;
 
@@ -266,12 +279,15 @@ class _GlassTabBarState extends State<GlassTabBar> {
 
     final content = Container(
       height: widget.height,
+      // No clipBehavior: the glass indicator's 8px expansion must not be
+      // clipped. Scroll content is already clipped by SingleChildScrollView's
+      // own Clip.hardEdge viewport — the Container clip is not needed for that.
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: borderRadius,
       ),
       padding: widget.indicatorPadding,
-      child: _TabBarContent(
+      child: TabBarContent(
         tabs: widget.tabs,
         selectedIndex: widget.selectedIndex,
         onTabSelected: widget.onTabSelected,
@@ -285,10 +301,13 @@ class _GlassTabBarState extends State<GlassTabBar> {
         iconSize: widget.iconSize,
         labelPadding: widget.labelPadding,
         quality: effectiveQuality,
-        // Pass new props
         indicatorBorderRadius: widget.indicatorBorderRadius,
         indicatorSettings: widget.indicatorSettings,
         backgroundKey: widget.backgroundKey,
+        maskingQuality: widget.maskingQuality,
+        dividerSettings: widget.dividerSettings,
+        indicatorShadow: widget.indicatorShadow,
+        tabBarBorderRadius: borderRadius,
       ),
     );
 
@@ -305,357 +324,8 @@ class _GlassTabBarState extends State<GlassTabBar> {
 }
 
 // =============================================================================
-// Internal Content Widget
+// GlassTab — public configuration type
 // =============================================================================
-
-class _TabBarContent extends StatefulWidget {
-  const _TabBarContent({
-    required this.tabs,
-    required this.selectedIndex,
-    required this.onTabSelected,
-    required this.isScrollable,
-    required this.scrollController,
-    required this.indicatorColor,
-    required this.selectedLabelStyle,
-    required this.unselectedLabelStyle,
-    required this.selectedIconColor,
-    required this.unselectedIconColor,
-    required this.iconSize,
-    required this.labelPadding,
-    required this.quality,
-    this.indicatorBorderRadius,
-    this.indicatorSettings,
-    this.backgroundKey,
-  });
-
-  final List<GlassTab> tabs;
-  final int selectedIndex;
-  final ValueChanged<int> onTabSelected;
-  final bool isScrollable;
-  final ScrollController scrollController;
-  final Color? indicatorColor;
-  final TextStyle? selectedLabelStyle;
-  final TextStyle? unselectedLabelStyle;
-  final Color? selectedIconColor;
-  final Color? unselectedIconColor;
-  final double iconSize;
-  final EdgeInsetsGeometry labelPadding;
-  final GlassQuality quality;
-  final BorderRadius? indicatorBorderRadius;
-  final LiquidGlassSettings? indicatorSettings;
-  final GlobalKey? backgroundKey;
-
-  @override
-  State<_TabBarContent> createState() => _TabBarContentState();
-}
-
-class _TabBarContentState extends State<_TabBarContent> {
-  // Cache default colors to avoid allocations
-  static const _defaultIndicatorColor =
-      Color(0x33FFFFFF); // white.withValues(alpha: 0.2)
-  static const _defaultUnselectedTextColor =
-      Color(0x99FFFFFF); // white.withValues(alpha: 0.6)
-  static const _defaultUnselectedIconColor =
-      Color(0x99FFFFFF); // white.withValues(alpha: 0.6)
-
-  bool _isDown = false;
-  bool _isDragging = false;
-  late double _xAlign = _computeXAlignmentForTab(widget.selectedIndex);
-
-  @override
-  void didUpdateWidget(_TabBarContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedIndex != widget.selectedIndex ||
-        oldWidget.tabs.length != widget.tabs.length) {
-      setState(() {
-        _xAlign = _computeXAlignmentForTab(widget.selectedIndex);
-      });
-    }
-  }
-
-  double _computeXAlignmentForTab(int tabIndex) {
-    return DraggableIndicatorPhysics.computeAlignment(
-      tabIndex,
-      widget.tabs.length,
-    );
-  }
-
-  void _onDragDown(DragDownDetails details) {
-    setState(() {
-      _isDown = true;
-      _xAlign = _getAlignmentFromGlobalPosition(details.globalPosition);
-    });
-  }
-
-  void _onDragUpdate(DragUpdateDetails details) {
-    setState(() {
-      _isDragging = true;
-      _xAlign = _getAlignmentFromGlobalPosition(details.globalPosition);
-    });
-  }
-
-  void _onDragEnd(DragEndDetails details) {
-    setState(() {
-      _isDragging = false;
-      _isDown = false;
-    });
-
-    final box = context.findRenderObject()! as RenderBox;
-    final currentRelativeX = (_xAlign + 1) / 2;
-    final tabWidth = 1.0 / widget.tabs.length;
-    final indicatorWidth = 1.0 / widget.tabs.length;
-    final draggableRange = 1.0 - indicatorWidth;
-    final velocityX =
-        (details.velocity.pixelsPerSecond.dx / box.size.width) / draggableRange;
-
-    final targetTabIndex = _computeTargetTab(
-      currentRelativeX: currentRelativeX,
-      velocityX: velocityX,
-      tabWidth: tabWidth,
-    );
-
-    _xAlign = _computeXAlignmentForTab(targetTabIndex);
-
-    if (targetTabIndex != widget.selectedIndex) {
-      widget.onTabSelected(targetTabIndex);
-    }
-  }
-
-  double _getAlignmentFromGlobalPosition(Offset globalPosition) {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return _xAlign;
-
-    final local = box.globalToLocal(globalPosition);
-    final relativeX = (local.dx / box.size.width).clamp(0.0, 1.0);
-    final indicatorWidth = 1.0 / widget.tabs.length;
-    final draggableRange = 1.0 - indicatorWidth;
-
-    if (draggableRange <= 0) return 0.0;
-    final alignment = (relativeX / draggableRange - 0.5) * 2;
-    return alignment.clamp(-1.0, 1.0);
-  }
-
-  int _computeTargetTab({
-    required double currentRelativeX,
-    required double velocityX,
-    required double tabWidth,
-  }) {
-    return DraggableIndicatorPhysics.computeTargetIndex(
-      currentRelativeX: currentRelativeX,
-      velocityX: velocityX,
-      itemWidth: tabWidth,
-      itemCount: widget.tabs.length,
-    );
-  }
-
-  void _onTabTap(int index) {
-    if (index != widget.selectedIndex) {
-      widget.onTabSelected(index);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final indicatorColor = widget.indicatorColor ?? _defaultIndicatorColor;
-    final targetAlignment = _computeXAlignmentForTab(widget.selectedIndex);
-
-    final selectedLabelStyle = widget.selectedLabelStyle ??
-        const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-        );
-
-    final unselectedLabelStyle = widget.unselectedLabelStyle ??
-        const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: _defaultUnselectedTextColor,
-        );
-
-    final selectedIconColor = widget.selectedIconColor ?? Colors.white;
-    final unselectedIconColor =
-        widget.unselectedIconColor ?? _defaultUnselectedIconColor;
-
-    return GestureDetector(
-      onHorizontalDragDown: _onDragDown,
-      onHorizontalDragUpdate: _onDragUpdate,
-      onHorizontalDragEnd: _onDragEnd,
-      onHorizontalDragCancel: () => setState(() {
-        _isDragging = false;
-        _isDown = false;
-      }),
-      child: VelocityMotionBuilder(
-        converter: const SingleMotionConverter(),
-        value: _xAlign,
-        motion: _isDragging
-            ? const Motion.interactiveSpring(snapToEnd: true)
-            : const Motion.bouncySpring(snapToEnd: true),
-        builder: (context, value, velocity, child) {
-          final alignment = Alignment(value, 0);
-
-          return SingleMotionBuilder(
-            motion: const Motion.snappySpring(
-              snapToEnd: true,
-              duration: Duration(milliseconds: 300),
-            ),
-            value: _isDown || (alignment.x - targetAlignment).abs() > 0.15
-                ? 1.0
-                : 0.0,
-            builder: (context, thickness, child) {
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Unified Glass Indicator with jelly physics
-                  // The internal cross-fade in AnimatedGlassIndicator prevents flickering
-                  AnimatedGlassIndicator(
-                    velocity: velocity,
-                    itemCount: widget.tabs.length,
-                    alignment: alignment,
-                    thickness: thickness,
-                    quality: widget.quality,
-                    indicatorColor: indicatorColor,
-                    isBackgroundIndicator:
-                        false, // Internal logic now handles both
-                    borderRadius: widget.indicatorBorderRadius?.topLeft.x ?? 16,
-                    glassSettings: widget.indicatorSettings,
-                    backgroundKey: widget.backgroundKey,
-                  ),
-
-                  child!,
-                ],
-              );
-            },
-            child: _buildTabLabels(
-              selectedLabelStyle,
-              unselectedLabelStyle,
-              selectedIconColor,
-              unselectedIconColor,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildTabLabels(
-    TextStyle selectedStyle,
-    TextStyle unselectedStyle,
-    Color selectedIconColor,
-    Color unselectedIconColor,
-  ) {
-    final tabWidgets = List.generate(
-      widget.tabs.length,
-      (index) {
-        final tab = widget.tabs[index];
-        final isSelected = index == widget.selectedIndex;
-        return RepaintBoundary(
-          child: _TabItem(
-            tab: tab,
-            isSelected: isSelected,
-            onTap: () => _onTabTap(index),
-            labelStyle: isSelected ? selectedStyle : unselectedStyle,
-            iconColor: isSelected ? selectedIconColor : unselectedIconColor,
-            iconSize: widget.iconSize,
-            padding: widget.labelPadding,
-          ),
-        );
-      },
-    );
-
-    if (widget.isScrollable) {
-      return SingleChildScrollView(
-        controller: widget.scrollController,
-        scrollDirection: Axis.horizontal,
-        child: Row(children: tabWidgets),
-      );
-    }
-
-    return Row(
-      children: tabWidgets.map((tab) => Expanded(child: tab)).toList(),
-    );
-  }
-}
-
-class _TabItem extends StatelessWidget {
-  const _TabItem({
-    required this.tab,
-    required this.isSelected,
-    required this.onTap,
-    required this.labelStyle,
-    required this.iconColor,
-    required this.iconSize,
-    required this.padding,
-  });
-
-  final GlassTab tab;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final TextStyle labelStyle;
-  final Color iconColor;
-  final double iconSize;
-  final EdgeInsetsGeometry padding;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget? iconWidget;
-    if (tab.icon != null) {
-      iconWidget = Icon(
-        tab.icon,
-        size: iconSize,
-        color: iconColor,
-      );
-    }
-
-    Widget? labelWidget;
-    if (tab.label != null) {
-      labelWidget = Text(
-        tab.label!,
-        style: labelStyle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
-
-    Widget content;
-    if (iconWidget != null && labelWidget != null) {
-      content = Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          iconWidget,
-          const SizedBox(height: 4),
-          labelWidget,
-        ],
-      );
-    } else if (iconWidget != null) {
-      content = iconWidget;
-    } else if (labelWidget != null) {
-      content = labelWidget;
-    } else {
-      content = const SizedBox.shrink();
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Semantics(
-        button: true,
-        selected: isSelected,
-        label: tab.semanticLabel ?? tab.label,
-        child: Container(
-          padding: padding,
-          alignment: Alignment.center,
-          child: AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 200),
-            style: labelStyle,
-            child: content,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Configuration for a tab in [GlassTabBar].
 class GlassTab {
@@ -669,12 +339,97 @@ class GlassTab {
           'GlassTab must have either an icon or label',
         );
 
-  /// Icon to display in the tab.
-  final IconData? icon;
+  /// Icon widget to display in the tab.
+  final Widget? icon;
 
   /// Label text to display in the tab.
   final String? label;
 
   /// Semantic label for accessibility.
   final String? semanticLabel;
+}
+
+// =============================================================================
+// DividerSettings — configuration for inter-tab dividers
+// =============================================================================
+
+/// Configuration for optional vertical dividers between tabs in [GlassTabBar].
+///
+/// Dividers are rendered as thin vertical lines between tab items and can
+/// automatically hide themselves adjacent to the active tab.
+class DividerSettings {
+  /// Top indent of the divider line.
+  final double indent;
+
+  /// Bottom indent of the divider line.
+  final double endIndent;
+
+  /// Width (thickness) of the divider line.
+  final double thickness;
+
+  /// Optional custom decoration. Defaults to a white 20% opacity line.
+  final BoxDecoration? decoration;
+
+  /// Duration of the show/hide animation. Defaults to 200ms.
+  final Duration? duration;
+
+  /// Curve of the show/hide animation. Defaults to [Curves.easeInOut].
+  final Curve? curve;
+
+  /// When true, dividers adjacent to the selected tab are hidden automatically.
+  final bool isHideAutomatically;
+
+  const DividerSettings({
+    this.indent = 0,
+    this.endIndent = 0,
+    this.thickness = 1,
+    this.decoration,
+    this.duration,
+    this.curve,
+    this.isHideAutomatically = true,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    return other is DividerSettings &&
+        indent == other.indent &&
+        endIndent == other.endIndent &&
+        thickness == other.thickness &&
+        decoration == other.decoration &&
+        duration == other.duration &&
+        curve == other.curve &&
+        isHideAutomatically == other.isHideAutomatically;
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+        indent,
+        endIndent,
+        thickness,
+        decoration,
+        duration,
+        curve,
+        isHideAutomatically,
+      ]);
+
+  /// Returns a copy of this [DividerSettings] with the given fields replaced.
+  DividerSettings copyWith({
+    double? indent,
+    double? endIndent,
+    double? thickness,
+    BoxDecoration? decoration,
+    Duration? duration,
+    Curve? curve,
+    bool? isHideAutomatically,
+  }) {
+    return DividerSettings(
+      indent: indent ?? this.indent,
+      endIndent: endIndent ?? this.endIndent,
+      thickness: thickness ?? this.thickness,
+      decoration: decoration ?? this.decoration,
+      duration: duration ?? this.duration,
+      curve: curve ?? this.curve,
+      isHideAutomatically: isHideAutomatically ?? this.isHideAutomatically,
+    );
+  }
 }

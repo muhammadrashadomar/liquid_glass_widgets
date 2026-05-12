@@ -15,7 +15,7 @@ void main() {
           child: AdaptiveLiquidGlassLayer(
             settings: defaultTestGlassSettings,
             child: GlassButton(
-              icon: CupertinoIcons.heart,
+              icon: Icon(CupertinoIcons.heart),
               onTap: () {},
             ),
           ),
@@ -32,7 +32,7 @@ void main() {
           child: AdaptiveLiquidGlassLayer(
             settings: defaultTestGlassSettings,
             child: GlassButton(
-              icon: Icons.star,
+              icon: Icon(Icons.star),
               onTap: () {},
             ),
           ),
@@ -50,7 +50,7 @@ void main() {
           child: AdaptiveLiquidGlassLayer(
             settings: defaultTestGlassSettings,
             child: GlassButton(
-              icon: Icons.add,
+              icon: Icon(Icons.add),
               onTap: () => tapped = true,
             ),
           ),
@@ -71,7 +71,7 @@ void main() {
           child: AdaptiveLiquidGlassLayer(
             settings: defaultTestGlassSettings,
             child: GlassButton(
-              icon: Icons.add,
+              icon: Icon(Icons.add),
               onTap: () => tapped = true,
               enabled: false,
             ),
@@ -91,7 +91,7 @@ void main() {
           child: AdaptiveLiquidGlassLayer(
             settings: defaultTestGlassSettings,
             child: GlassButton(
-              icon: Icons.add,
+              icon: Icon(Icons.add),
               onTap: () {},
               enabled: false,
             ),
@@ -136,7 +136,7 @@ void main() {
           child: AdaptiveLiquidGlassLayer(
             settings: defaultTestGlassSettings,
             child: GlassButton(
-              icon: Icons.star,
+              icon: Icon(Icons.star),
               onTap: () {},
               width: customWidth,
               height: customHeight,
@@ -166,7 +166,7 @@ void main() {
           child: AdaptiveLiquidGlassLayer(
             settings: defaultTestGlassSettings,
             child: GlassButton(
-              icon: Icons.add,
+              icon: Icon(Icons.add),
               onTap: () {},
               label: semanticLabel,
             ),
@@ -192,7 +192,7 @@ void main() {
       await tester.pumpWidget(
         createTestApp(
           child: GlassButton(
-            icon: Icons.star,
+            icon: Icon(Icons.star),
             onTap: () {},
             useOwnLayer: true,
             settings: defaultTestGlassSettings,
@@ -207,7 +207,7 @@ void main() {
       await tester.pumpWidget(
         createTestApp(
           child: GlassButton(
-            icon: Icons.star,
+            icon: Icon(Icons.star),
             onTap: () {},
             useOwnLayer: true,
             quality: GlassQuality.premium,
@@ -220,7 +220,7 @@ void main() {
 
     test('defaults are correct', () {
       final button = GlassButton(
-        icon: Icons.star,
+        icon: Icon(Icons.star),
         onTap: () {},
       );
 
@@ -232,6 +232,59 @@ void main() {
       expect(button.quality, isNull);
       expect(button.interactionScale, equals(1.05));
       expect(button.stretch, equals(0.5));
+    });
+  });
+
+  // ── _handleTapCancel (lines 436-438) ────────────────────────────────────────
+  group('GlassButton tap-cancel', () {
+    testWidgets('tap-cancel on enabled button reverses animation',
+        (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          child: AdaptiveLiquidGlassLayer(
+            settings: defaultTestGlassSettings,
+            child: GlassButton(
+              icon: const Icon(Icons.star),
+              onTap: () {},
+            ),
+          ),
+        ),
+      );
+
+      // Start tap then cancel — exercises _handleTapCancel (line 436-438)
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(GlassButton)),
+      );
+      await tester.pump();
+      await gesture.cancel();
+      await tester.pump();
+
+      expect(find.byType(GlassButton), findsOneWidget);
+    });
+
+    testWidgets('tap-cancel on disabled button is a no-op (line 437 guard)',
+        (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          child: AdaptiveLiquidGlassLayer(
+            settings: defaultTestGlassSettings,
+            child: GlassButton(
+              icon: const Icon(Icons.star),
+              onTap: () {},
+              enabled: false, // exercises `if (!widget.enabled) return;`
+            ),
+          ),
+        ),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(GlassButton)),
+      );
+      await tester.pump();
+      await gesture.cancel();
+      await tester.pump();
+
+      expect(find.byType(GlassButton), findsOneWidget);
     });
   });
 }

@@ -78,22 +78,27 @@ class _GlassBottomBarDemoPageState extends State<GlassBottomBarDemoPage> {
         unselectedIconColor: Colors.white.withValues(alpha: 0.4),
         indicatorColor: Colors.blue.withValues(alpha: 0.2),
         maskingQuality: MaskingQuality.high,
+        extraButton: GlassBottomBarExtraButton(
+          icon: const Icon(CupertinoIcons.info),
+          label: 'something',
+          onTap: () {},
+        ),
         tabs: [
           GlassBottomBarTab(
             label: 'Home',
-            icon: CupertinoIcons.home,
-            selectedIcon: CupertinoIcons.home,
+            icon: const Icon(CupertinoIcons.home),
+            activeIcon: const Icon(CupertinoIcons.home),
           ),
           GlassBottomBarTab(
             // Empty label - should center icon
             label: null,
-            icon: CupertinoIcons.add_circled,
-            selectedIcon: CupertinoIcons.add_circled_solid,
+            icon: const Icon(CupertinoIcons.add_circled),
+            activeIcon: const Icon(CupertinoIcons.add_circled_solid),
           ),
           GlassBottomBarTab(
             label: 'Profile',
-            icon: CupertinoIcons.person,
-            selectedIcon: CupertinoIcons.person_fill,
+            icon: const Icon(CupertinoIcons.person),
+            activeIcon: const Icon(CupertinoIcons.person_fill),
           ),
         ],
       ),

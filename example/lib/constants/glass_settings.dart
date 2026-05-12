@@ -7,6 +7,19 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 /// These settings provide the best iOS 26 liquid glass appearance across
 /// both Skia (standard) and Impeller (premium) renderers.
 ///
+/// ## lightAngle Convention
+///
+/// `lightAngle` is in **radians**, measured from the positive-x axis
+/// (right), counter-clockwise in standard math coords (which maps
+/// clockwise on screen since screen-y points down).
+///
+/// Common values:
+/// - `0.5  * pi` = 90°  → directly above (API default)
+/// - `0.75 * pi` = 135° → upper-left  (Apple standard — all iOS 26 surfaces)
+///
+/// Apple uses a **single consistent upper-left light source** across all glass
+/// surfaces. Do not vary the angle per-component — it breaks visual coherence.
+///
 /// ## refractiveIndex Parameter Guide:
 ///
 /// **Standard Quality (Lightweight Shader - Skia):**
@@ -35,7 +48,7 @@ class RecommendedGlassSettings {
     blur: 10,
     thickness: 0,
     glassColor: Color.fromRGBO(255, 255, 255, 0.12),
-    lightAngle: 135, // 135° - upper right
+    lightAngle: 0.75 * math.pi, // 135° — upper-left, matches iOS 26
     lightIntensity: 0.7,
     ambientStrength: 0.4,
     saturation: 1.2,
@@ -55,7 +68,7 @@ class RecommendedGlassSettings {
     blur: 10,
     thickness: 10,
     glassColor: Color.fromRGBO(255, 255, 255, 0.2),
-    lightAngle: 135,
+    lightAngle: 0.75 * math.pi, // 135° — upper-left, matches iOS 26
     lightIntensity: 0.7,
     ambientStrength: 0.3,
     saturation: 0.0, // Glow intensity (0.0=off, animated on press)
@@ -72,7 +85,7 @@ class RecommendedGlassSettings {
     blur: 10,
     thickness: 10,
     glassColor: Color.fromRGBO(255, 255, 255, 0.2),
-    lightAngle: 135,
+    lightAngle: 0.75 * math.pi, // 135° — upper-left, matches iOS 26
     lightIntensity: 0.7,
     ambientStrength: 0.3,
     saturation: 1.2,
@@ -83,36 +96,63 @@ class RecommendedGlassSettings {
 
   /// Settings for bottom navigation bars.
   ///
-  /// Optimized for premium quality in static position.
-  ///
+  /// Tuned to Apple's iOS 26 bottom bar specification:
+  /// - blur: 20 — Apple's nav chrome uses ~20pt heavy frost
+  /// - glassColor: 15% white — adequate weight on diverse wallpapers
+  /// - lightAngle: 0.75*pi — upper-left, same as all other surfaces (Apple standard)
   /// - refractiveIndex: 1.2 = moderate rim (standard) / noticeable refraction (premium)
   static const bottomBar = LiquidGlassSettings(
-    blur: 12,
+    blur: 20,
     thickness: 20,
-    glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-    lightAngle: 0.75 * math.pi,
+    glassColor: Color.fromRGBO(255, 255, 255, 0.15),
+    lightAngle: 0.75 *
+        math.pi, // 135° — upper-left, Apple standard (consistent across all surfaces)
     lightIntensity: 0.7,
     ambientStrength: 0.5,
-    saturation: 1.4,
+    saturation: 1.2,
     refractiveIndex:
         1.2, // Moderate rim (standard) / noticeable refraction (premium)
     chromaticAberration: 0.0,
   );
 
-  /// Settings for overlays and sheets.
+  /// Settings for overlay page layers, cards, and buttons.
   ///
-  /// Balanced for modal dialogs and bottom sheets.
+  /// Use this for [AdaptiveLiquidGlassLayer] and [GlassCard]/[GlassButton]
+  /// within an overlays page context.
   ///
-  /// - refractiveIndex: 0.7 = thin delicate rim (iOS 26 aesthetic)
+  /// - refractiveIndex: 0.7 = thin delicate rim (iOS 26 aesthetic for small widgets)
   static const overlay = LiquidGlassSettings(
     blur: 10,
     thickness: 10,
     glassColor: Color.fromRGBO(255, 255, 255, 0.12),
-    lightAngle: 135,
+    lightAngle: 0.75 * math.pi, // 135° — upper-left, matches iOS 26
     lightIntensity: 0.7,
     ambientStrength: 0.4,
     saturation: 1.2,
-    refractiveIndex: 0.7, // Thin rim (standard) / subtle refraction (premium)
+    refractiveIndex:
+        0.7, // Thin rim for cards/buttons (standard / subtle refraction premium)
+    chromaticAberration: 0.0,
+  );
+
+  /// Settings specifically for large bottom sheets and modal overlays.
+  ///
+  /// Use this as the [settings] parameter in [GlassSheet.show] and
+  /// [GlassModalSheet.show] to avoid the hard "line" artifact on large
+  /// surfaces that use the lightweight shader.
+  ///
+  /// The lightweight shader's rim opacity = kRimAlphaBase(0.8) × refractiveIndex.
+  /// - At 0.7 (overlay preset): rim = 0.56 opacity → visible hard border on sheets
+  /// - At 0.15 (this preset):   rim = 0.12 opacity → barely-perceptible glassy edge
+  static const sheet = LiquidGlassSettings(
+    blur: 10,
+    thickness: 10,
+    glassColor: Color.fromRGBO(255, 255, 255, 0.12),
+    lightAngle: 0.75 * math.pi, // 135° — upper-left, matches iOS 26
+    lightIntensity: 0.7,
+    ambientStrength: 0.4,
+    saturation: 1.2,
+    refractiveIndex:
+        0.15, // Near-invisible rim — correct for large sheet surfaces
     chromaticAberration: 0.0,
   );
 
@@ -125,7 +165,7 @@ class RecommendedGlassSettings {
     blur: 20,
     thickness: 10,
     glassColor: Color.fromRGBO(255, 255, 255, 0.12),
-    lightAngle: 135,
+    lightAngle: 0.75 * math.pi, // 135° — upper-left, matches iOS 26
     lightIntensity: 0.7,
     ambientStrength: 0.4,
     saturation: 1.2,

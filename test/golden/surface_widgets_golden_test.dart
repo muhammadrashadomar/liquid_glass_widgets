@@ -1,8 +1,4 @@
-@Tags(['golden'])
-library;
-
 import 'package:alchemist/alchemist.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/widgets/interactive/glass_button.dart';
 import 'package:liquid_glass_widgets/widgets/surfaces/glass_app_bar.dart';
 import 'package:liquid_glass_widgets/widgets/surfaces/glass_bottom_bar.dart';
@@ -51,8 +47,8 @@ void main() {
                     style: TextStyle(color: Colors.white),
                   ),
                   actions: [
-                    GlassButton(icon: Icons.search, onTap: () {}),
-                    GlassButton(icon: Icons.more_horiz, onTap: () {}),
+                    GlassButton(icon: Icon(Icons.search), onTap: () {}),
+                    GlassButton(icon: Icon(Icons.more_horiz), onTap: () {}),
                   ],
                 ),
               ),
@@ -78,15 +74,15 @@ void main() {
               tabs: const [
                 GlassBottomBarTab(
                   label: 'Home',
-                  icon: CupertinoIcons.home,
+                  icon: Icon(CupertinoIcons.home),
                 ),
                 GlassBottomBarTab(
                   label: 'Search',
-                  icon: CupertinoIcons.search,
+                  icon: Icon(CupertinoIcons.search),
                 ),
                 GlassBottomBarTab(
                   label: 'Profile',
-                  icon: CupertinoIcons.person,
+                  icon: Icon(CupertinoIcons.person),
                 ),
               ],
               selectedIndex: 0,
@@ -101,20 +97,48 @@ void main() {
               tabs: const [
                 GlassBottomBarTab(
                   label: 'Home',
-                  icon: CupertinoIcons.home,
+                  icon: Icon(CupertinoIcons.home),
                 ),
                 GlassBottomBarTab(
                   label: 'Search',
-                  icon: CupertinoIcons.search,
+                  icon: Icon(CupertinoIcons.search),
                 ),
               ],
               selectedIndex: 0,
               onTabSelected: (_) {},
               extraButton: GlassBottomBarExtraButton(
-                icon: CupertinoIcons.add,
+                icon: Icon(CupertinoIcons.add),
                 label: 'Add',
                 onTap: () {},
               ),
+            ),
+          ),
+        ),
+        // Expand mode (tabWidth: null) — kept as a regression sentinel.
+        // Verifies that the legacy full-width behaviour is not accidentally
+        // broken when the default compact sizing changes.
+        GoldenTestScenario(
+          name: 'three_tabs_expand',
+          child: buildWithGradientBackground(
+            GlassBottomBar(
+              tabs: const [
+                GlassBottomBarTab(
+                  label: 'Home',
+                  icon: Icon(CupertinoIcons.home),
+                ),
+                GlassBottomBarTab(
+                  label: 'Search',
+                  icon: Icon(CupertinoIcons.search),
+                ),
+                GlassBottomBarTab(
+                  label: 'Profile',
+                  icon: Icon(CupertinoIcons.person),
+                ),
+              ],
+              tabWidth: null, // explicit expand — overrides the 88.0 default
+
+              selectedIndex: 0,
+              onTabSelected: (_) {},
             ),
           ),
         ),

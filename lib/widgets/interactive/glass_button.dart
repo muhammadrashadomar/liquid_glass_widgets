@@ -1,12 +1,12 @@
 import 'package:flutter/cupertino.dart' show CupertinoColors;
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../../src/renderer/liquid_glass_renderer.dart';
 
 import '../../theme/glass_theme_data.dart';
 import '../../types/glass_quality.dart';
 import '../../types/glass_button_style.dart';
 import '../shared/adaptive_glass.dart';
-import '../shared/inherited_liquid_glass.dart';
+import '../../theme/glass_theme_helpers.dart';
 
 /// Glass morphism button with scale animation and glow effects.
 ///
@@ -36,7 +36,7 @@ import '../shared/inherited_liquid_glass.dart';
 ///   child: Column(
 ///     children: [
 ///       GlassButton(
-///         icon: CupertinoIcons.heart,
+///         icon: Icon(CupertinoIcons.heart),
 ///         onTap: () => print('Favorite'),
 ///       ),
 ///     ],
@@ -48,7 +48,7 @@ import '../shared/inherited_liquid_glass.dart';
 /// Creates its own layer with [LiquidGlass.withOwnLayer]:
 /// ```dart
 /// GlassButton(
-///   icon: CupertinoIcons.play,
+///   icon: Icon(CupertinoIcons.play),
 ///   onTap: () => print('Play'),
 ///   useOwnLayer: true,
 ///   settings: LiquidGlassSettings(
@@ -63,7 +63,7 @@ import '../shared/inherited_liquid_glass.dart';
 /// ### Custom stretch behavior:
 /// ```dart
 /// GlassButton(
-///   icon: CupertinoIcons.star,
+///   icon: Icon(CupertinoIcons.star),
 ///   onTap: () {},
 ///   interactionScale: 1.1,  // Grow 10% when pressed
 ///   stretch: 0.8,           // More dramatic stretch
@@ -74,7 +74,7 @@ import '../shared/inherited_liquid_glass.dart';
 /// ### Custom glow effect:
 /// ```dart
 /// GlassButton(
-///   icon: CupertinoIcons.bolt,
+///   icon: Icon(CupertinoIcons.bolt),
 ///   onTap: () {},
 ///   glowColor: Colors.blue.withOpacity(0.4),
 ///   glowRadius: 1.5,  // Larger glow
@@ -90,6 +90,36 @@ import '../shared/inherited_liquid_glass.dart';
 ///   child: Text('Click Me', style: TextStyle(color: Colors.white)),
 /// )
 /// ```
+///
+/// ## Navigation bar / toolbar usage
+///
+/// When multiple buttons share a [LiquidGlassBlendGroup] (e.g. inside an
+/// [AdaptiveLiquidGlassLayer]), the drag-follow animation physically moves each
+/// button's glass shape in the shader's coordinate space. Because the blend
+/// group treats all shapes as a connected liquid surface, dragging one button
+/// causes neighboring buttons to visually respond — this is intentional for
+/// isolated floating buttons, but can feel jarring in a nav bar.
+///
+/// Reduce [stretch] for tightly-grouped buttons to keep the tactile press feel
+/// without excessive cross-button coupling:
+///
+/// ```dart
+/// // Nav bar / toolbar — subtle liquid feel, minimal coupling
+/// GlassButton(
+///   stretch: 0.15,
+///   icon: Icon(CupertinoIcons.home),
+///   onTap: () {},
+/// )
+///
+/// // Standalone FAB — full liquid feel (default)
+/// GlassButton(
+///   icon: Icon(CupertinoIcons.add),
+///   onTap: () {},
+/// )
+/// ```
+///
+/// Setting [stretch] to `0.0` disables drag-following entirely while keeping
+/// the press-scale effect ([interactionScale]).
 class GlassButton extends StatefulWidget {
   /// Creates a glass button with an icon.
   const GlassButton({
@@ -113,6 +143,9 @@ class GlassButton extends StatefulWidget {
     // GlassGlow properties
     this.glowColor,
     this.glowRadius = 1.0,
+    this.glowBlurRadius,
+    this.glowSpreadRadius,
+    this.glowOpacity,
     this.glowHitTestBehavior = HitTestBehavior.opaque,
     this.enabled = true,
     this.style = GlassButtonStyle.filled,
@@ -158,6 +191,9 @@ class GlassButton extends StatefulWidget {
     // GlassGlow properties
     this.glowColor,
     this.glowRadius = 1.0,
+    this.glowBlurRadius,
+    this.glowSpreadRadius,
+    this.glowOpacity,
     this.glowHitTestBehavior = HitTestBehavior.opaque,
     this.enabled = true,
     this.style = GlassButtonStyle.filled,
@@ -169,11 +205,12 @@ class GlassButton extends StatefulWidget {
   // Content Properties
   // ===========================================================================
 
-  /// The icon to display in the button.
+  /// The widget to display in the button.
   ///
-  /// Mutually exclusive with [child]. Use the default constructor for icon
-  /// buttons, or [GlassButton.custom] for custom content.
-  final IconData? icon;
+  /// Mutually exclusive with [child]. Pass any widget — standard [Icon]
+  /// widgets will inherit color and size from [iconColor] and [iconSize]
+  /// via [IconTheme]. Custom widgets handle their own styling.
+  final Widget? icon;
 
   /// Custom widget to display in the button.
   ///
@@ -266,7 +303,30 @@ class GlassButton extends StatefulWidget {
   /// Defaults to [GlassQuality.standard], which uses backdrop filter rendering.
   /// This works reliably in all contexts, including scrollable lists.
   ///
-  /// Use [GlassQuality.premium] for shader-based glass in static layouts only.
+  /// Use [GlassQuality.premium] for the full Impeller shader pipeline. When using
+  /// premium quality on a standalone button (outside of an [AdaptiveLiquidGlassLayer]
+  /// or [LiquidGlassLayer]), you **must** also set [useOwnLayer] to `true`.
+  /// Without it, the button has no ancestor layer to render against and will show
+  /// an assertion error in debug mode (graceful pass-through in release).
+  ///
+  /// ```dart
+  /// // ✓ Correct — standalone premium button
+  /// GlassButton(
+  ///   quality: GlassQuality.premium,
+  ///   useOwnLayer: true,
+  ///   icon: Icon(CupertinoIcons.play),
+  ///   onTap: () {},
+  /// )
+  ///
+  /// // ✓ Also correct — inside an AdaptiveLiquidGlassLayer (no useOwnLayer needed)
+  /// AdaptiveLiquidGlassLayer(
+  ///   quality: GlassQuality.premium,
+  ///   child: GlassButton(
+  ///     icon: Icon(CupertinoIcons.play),
+  ///     onTap: () {},
+  ///   ),
+  /// )
+  /// ```
   final GlassQuality? quality;
 
   /// The visual style of the button.
@@ -354,6 +414,22 @@ class GlassButton extends StatefulWidget {
   /// Defaults to 1.0.
   final double glowRadius;
 
+  /// Additional Gaussian blur sigma applied to the glow halo.
+  ///
+  /// If null, the value from [GlassThemeData.glowColorsFor] is used.
+  /// Pass 0 to disable blur. Values of 4–16 create a diffuse halo.
+  final double? glowBlurRadius;
+
+  /// Extra glow circle spread as a fraction of the layer's shortest side.
+  ///
+  /// If null, the value from [GlassThemeData.glowColorsFor] is used.
+  final double? glowSpreadRadius;
+
+  /// Master opacity multiplier (0–1) applied on top of [glowColor]'s alpha.
+  ///
+  /// If null, the value from [GlassThemeData.glowColorsFor] is used.
+  final double? glowOpacity;
+
   /// The hit test behavior for the glow gesture listener.
   ///
   /// Controls how the glow effect responds to touches:
@@ -409,11 +485,22 @@ class _GlassButtonState extends State<GlassButton>
 
   @override
   Widget build(BuildContext context) {
-    // Resolve glow color from theme if not explicitly provided
-    final themeData = GlassThemeData.of(context);
-    final effectiveGlowColor = widget.glowColor ??
-        themeData.glowColorsFor(context).primary ??
-        Colors.white24;
+    // Resolve quality and theme — hoisted here so stretchWidget can branch on quality
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: widget.quality,
+    );
+
+    final resolvedGlowColors =
+        GlassThemeData.of(context).glowColorsFor(context);
+    final effectiveGlowColor =
+        widget.glowColor ?? resolvedGlowColors.primary ?? Colors.white24;
+    final effectiveGlowBlurRadius =
+        widget.glowBlurRadius ?? resolvedGlowColors.glowBlurRadius;
+    final effectiveGlowSpreadRadius =
+        widget.glowSpreadRadius ?? resolvedGlowColors.glowSpreadRadius;
+    final effectiveGlowOpacity =
+        widget.glowOpacity ?? resolvedGlowColors.glowOpacity;
 
     // Build the content widget (either icon or custom child)
     final contentWidget = SizedBox(
@@ -421,10 +508,12 @@ class _GlassButtonState extends State<GlassButton>
       width: widget.width,
       child: Center(
         child: widget.child ??
-            Icon(
-              widget.icon,
-              size: widget.iconSize,
-              color: widget.iconColor,
+            IconTheme(
+              data: IconThemeData(
+                color: widget.iconColor,
+                size: widget.iconSize,
+              ),
+              child: widget.icon ?? const SizedBox.shrink(),
             ),
       ),
     );
@@ -434,6 +523,9 @@ class _GlassButtonState extends State<GlassButton>
     final glowContent = GlassGlow(
       glowColor: effectiveGlowColor,
       glowRadius: widget.glowRadius,
+      glowBlurRadius: effectiveGlowBlurRadius,
+      glowSpreadRadius: effectiveGlowSpreadRadius,
+      glowOpacity: effectiveGlowOpacity,
       hitTestBehavior: widget.glowHitTestBehavior,
       child: contentWidget,
     );
@@ -447,14 +539,10 @@ class _GlassButtonState extends State<GlassButton>
           return child!;
         }
 
-        final baseSettings =
-            widget.settings ?? InheritedLiquidGlass.ofOrDefault(context);
-
-        // Inherit quality from parent layer if not explicitly set
-        final inherited =
-            context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
-        final effectiveQuality =
-            widget.quality ?? (inherited?.quality ?? GlassQuality.standard);
+        final baseSettings = GlassThemeHelpers.resolveSettings(
+          context,
+          explicit: widget.settings,
+        );
 
         // Pass glow intensity directly to AdaptiveGlass for Skia shader feedback.
         // On Impeller, GlassGlow widget is used instead (separate from glass effect).
@@ -471,21 +559,30 @@ class _GlassButtonState extends State<GlassButton>
     );
 
     // 4. Wrap with stretch animation and interaction containers
-    // These remain outside the AnimatedBuilder to prevent redundant rebuilds
-    final stretchWidget = RepaintBoundary(
-      child: LiquidStretch(
-        interactionScale: widget.interactionScale,
-        stretch: widget.stretch,
-        resistance: widget.resistance,
-        hitTestBehavior: widget.stretchHitTestBehavior,
-        child: Semantics(
-          button: true,
-          label: widget.label.isNotEmpty ? widget.label : null,
-          enabled: widget.enabled,
-          child: glassWidget,
-        ),
+    // These remain outside the AnimatedBuilder to prevent redundant rebuilds.
+    //
+    // We explicitly skip wrapping RepaintBoundary in minimal quality to
+    // prevent sub-pixel edge jitter ("flicker-on-rest"). When a shape is tightly
+    // cached inside a RepaintBoundary and subjected to fractional scaling by the
+    // LiquidStretch spring, the texture's bilinear interpolation edge snaps abruptly
+    // to physical pixels exactly when velocity hits 0. Omitting the boundary
+    // forces pure vector shape computation every frame, bypassing texture pixel-snapping.
+    final stretchContent = LiquidStretch(
+      interactionScale: widget.interactionScale,
+      stretch: widget.stretch,
+      resistance: widget.resistance,
+      hitTestBehavior: widget.stretchHitTestBehavior,
+      child: Semantics(
+        button: true,
+        label: widget.label.isNotEmpty ? widget.label : null,
+        enabled: widget.enabled,
+        child: glassWidget,
       ),
     );
+
+    final stretchWidget = effectiveQuality == GlassQuality.minimal
+        ? stretchContent // No RepaintBoundary — forces smooth vector anti-aliasing
+        : RepaintBoundary(child: stretchContent);
 
     // Apply opacity when disabled
     final finalWidget = widget.enabled

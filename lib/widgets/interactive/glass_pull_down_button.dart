@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import '../../types/glass_quality.dart';
 import '../overlays/glass_menu.dart';
 import '../overlays/glass_menu_item.dart';
-import '../shared/inherited_liquid_glass.dart';
 import 'glass_button.dart';
+import '../../theme/glass_theme_helpers.dart';
 
 /// A toolbar button that opens a liquid glass pull-down menu.
 ///
@@ -15,7 +15,7 @@ class GlassPullDownButton extends StatelessWidget {
   /// Creates a glass pull-down button.
   const GlassPullDownButton({
     required this.items,
-    this.icon = CupertinoIcons.ellipsis_circle,
+    Widget? icon,
     this.label,
     super.key,
     this.buttonWidth = 44,
@@ -23,10 +23,10 @@ class GlassPullDownButton extends StatelessWidget {
     this.menuWidth = 200,
     this.quality,
     this.onSelected,
-  });
+  }) : icon = icon ?? const Icon(CupertinoIcons.ellipsis_circle);
 
-  /// The icon to display on the button.
-  final IconData icon;
+  /// The icon widget to display on the button.
+  final Widget icon;
 
   /// Optional label to display next to the icon.
   final String? label;
@@ -54,10 +54,10 @@ class GlassPullDownButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Inherit quality from parent layer if not explicitly set
-    final inherited =
-        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
-    final effectiveQuality =
-        quality ?? inherited?.quality ?? GlassQuality.standard;
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: quality,
+    );
 
     return GlassMenu(
       menuWidth: menuWidth,
@@ -74,7 +74,10 @@ class GlassPullDownButton extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 20, color: Colors.white),
+                IconTheme(
+                  data: const IconThemeData(size: 20, color: Colors.white),
+                  child: icon,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   label!,
@@ -106,6 +109,8 @@ class GlassPullDownButton extends StatelessWidget {
             title: item.title,
             icon: item.icon,
             isDestructive: item.isDestructive,
+            subtitle: item.subtitle,
+            enabled: item.enabled,
             onTap: () {
               item.onTap.call();
               onSelected!(item.title);

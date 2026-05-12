@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../../src/renderer/liquid_glass_renderer.dart';
 
 import 'inherited_liquid_glass.dart';
 
@@ -93,14 +93,30 @@ class LightweightLiquidGlass extends StatefulWidget {
   // On web: Each widget needs its own instance (CanvasKit requirement)
   static ui.FragmentShader? _sharedShader; // Native only
 
+  /// Resets static shader state for testing. Call between tests to ensure
+  /// each test gets the fallback rendering (no cached shader).
+  @visibleForTesting
+  static void resetForTesting() {
+    _cachedProgram = null;
+    _sharedShader = null;
+    _isPreparing = false;
+  }
+
   /// Global pre-warm method - loads and compiles the shader program.
   static Future<void> preWarm() async {
     if (_cachedProgram != null || _isPreparing) return;
     _isPreparing = true;
+    const path = 'packages/liquid_glass_widgets/shaders/lightweight_glass.frag';
+    const testPath = 'shaders/lightweight_glass.frag';
+
     try {
-      final program = await ui.FragmentProgram.fromAsset(
-        'packages/liquid_glass_widgets/shaders/lightweight_glass.frag',
-      );
+      ui.FragmentProgram program;
+      try {
+        program = await ui.FragmentProgram.fromAsset(path);
+      } catch (_) {
+        // Fallback for unit tests where package prefix may not be resolved
+        program = await ui.FragmentProgram.fromAsset(testPath);
+      }
       _cachedProgram = program;
 
       // On native platforms, create the shared shader instance
@@ -182,20 +198,57 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass> {
         (widget.settings == null ||
             widget.settings?.blur == inherited?.settings.blur);
 
-    if (shader == null) {
-      // Shader not ready yet - show fallback
-      return ClipPath(
-        clipper: ShapeBorderClipper(shape: widget.shape),
-        child: Container(
-          color: settings.effectiveGlassColor.withValues(alpha: 0.15),
-          child: widget.child,
+    // VQ4: Content-adaptive glass strength proxy.
+    // The lightweight shader has no backdrop texture, so platform brightness
+    // is used as the luma estimate — dark mode → richer glass (0.15),
+    // light mode → subtler glass (0.85). Maps to adaptiveStrength [1.2, 0.8]
+    // in the shader, matching iOS 26's adaptive material behaviour.
+    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final backdropLuma = isDark ? 0.15 : 0.85;
+
+    // IMPORTANT — always return the same widget tree structure regardless of
+    // whether the shader is loaded yet.
+    //
+    // Previously, a null shader caused an early return of
+    // `ClipPath → Container → child`. Once the shader loaded and `setState`
+    // fired, the build switched to `ClipPath → _LightweightGlassEffect → child`.
+    // Flutter saw a type change at the same slot (Container ≠
+    // _LightweightGlassEffect) and tore down the entire subtree, calling
+    // `initState` on every descendant StatefulWidget. This broke scroll
+    // positions, controllers, and any user State inside the glass surface.
+    //
+    // Fix: pass the (nullable) shader directly to _LightweightGlassEffect.
+    // The render object detects a null shader and paints a tinted passthrough
+    // instead of the full glass effect — visually identical to the old fallback
+    // but with a stable Element identity.
+
+    // ClipPath geometry matches the shader SDF (circular-arc rounded rect):
+    // Superellipse shapes use RoundedRectangleBorder so the ClipPath boundary
+    // aligns with the shader's SDF boundary, eliminating the gap that appears
+    // when a superellipse ClipPath is used with a circular-arc SDF
+    // (superellipse extends further into corners than a circular arc).
+    final ShapeBorder clipShape;
+    if (widget.shape is LiquidVerticalRoundedSuperellipse) {
+      final s = widget.shape as LiquidVerticalRoundedSuperellipse;
+      clipShape = RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(s.topRadius),
+          bottom: Radius.circular(s.bottomRadius),
         ),
       );
+    } else if (widget.shape is LiquidRoundedSuperellipse) {
+      final s = widget.shape as LiquidRoundedSuperellipse;
+      clipShape = RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(s.borderRadius)),
+      );
+    } else {
+      clipShape = widget.shape;
     }
 
     return ClipPath(
-      clipper: ShapeBorderClipper(shape: widget.shape),
+      clipper: ShapeBorderClipper(shape: clipShape),
       child: _LightweightGlassEffect(
+        // Nullable: render object paints tinted passthrough when null.
         shader: shader,
         settings: settings,
         shape: widget.shape,
@@ -203,6 +256,7 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass> {
         glowIntensity: widget.glowIntensity,
         densityFactor: widget.densityFactor,
         indicatorWeight: widget.indicatorWeight,
+        backdropLuma: backdropLuma,
         child: widget.child,
       ),
     );
@@ -211,6 +265,9 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass> {
 
 class _LightweightGlassEffect extends SingleChildRenderObjectWidget {
   const _LightweightGlassEffect({
+    // Nullable: when null the render object paints a tinted passthrough instead
+    // of the full glass effect. Keeping the widget type constant prevents Flutter
+    // from tearing down the child subtree when the shader loads asynchronously.
     required this.shader,
     required this.settings,
     required this.shape,
@@ -218,16 +275,20 @@ class _LightweightGlassEffect extends SingleChildRenderObjectWidget {
     required this.glowIntensity,
     required this.densityFactor,
     required this.indicatorWeight,
+    required this.backdropLuma,
     required super.child,
   });
 
-  final ui.FragmentShader shader;
+  final ui.FragmentShader? shader; // nullable — see comment above
   final LiquidGlassSettings settings;
   final LiquidShape shape;
   final bool skipBlur;
   final double glowIntensity;
   final double densityFactor;
   final double indicatorWeight;
+
+  /// VQ4: [0.15] for dark platform, [0.85] for light platform.
+  final double backdropLuma;
 
   @override
   RenderObject createRenderObject(BuildContext context) {
@@ -239,6 +300,7 @@ class _LightweightGlassEffect extends SingleChildRenderObjectWidget {
       glowIntensity: glowIntensity,
       densityFactor: densityFactor,
       indicatorWeight: indicatorWeight,
+      backdropLuma: backdropLuma,
     );
   }
 
@@ -254,30 +316,33 @@ class _LightweightGlassEffect extends SingleChildRenderObjectWidget {
       ..skipBlur = skipBlur
       ..glowIntensity = glowIntensity
       ..densityFactor = densityFactor
-      ..indicatorWeight = indicatorWeight;
+      ..indicatorWeight = indicatorWeight
+      ..backdropLuma = backdropLuma;
   }
 }
 
 class _RenderLightweightGlass extends RenderProxyBox {
   _RenderLightweightGlass({
-    required ui.FragmentShader shader,
+    required ui.FragmentShader? shader,
     required LiquidGlassSettings settings,
     required LiquidShape shape,
     required bool skipBlur,
     required double glowIntensity,
     required double densityFactor,
     required double indicatorWeight,
+    required double backdropLuma,
   })  : _shader = shader,
         _settings = settings,
         _shape = shape,
         _skipBlur = skipBlur,
         _glowIntensity = glowIntensity,
         _densityFactor = densityFactor,
-        _indicatorWeight = indicatorWeight;
+        _indicatorWeight = indicatorWeight,
+        _backdropLuma = backdropLuma;
 
-  ui.FragmentShader _shader;
-  ui.FragmentShader get shader => _shader;
-  set shader(ui.FragmentShader value) {
+  ui.FragmentShader? _shader;
+  ui.FragmentShader? get shader => _shader;
+  set shader(ui.FragmentShader? value) {
     if (_shader == value) return;
     _shader = value;
     markNeedsPaint();
@@ -331,29 +396,48 @@ class _RenderLightweightGlass extends RenderProxyBox {
     markNeedsPaint();
   }
 
+  double _backdropLuma;
+  double get backdropLuma => _backdropLuma;
+  set backdropLuma(double value) {
+    if (_backdropLuma == value) return;
+    _backdropLuma = value;
+    markNeedsPaint();
+  }
+
   @override
   bool get alwaysNeedsCompositing => true;
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    if (child != null) {
-      // 1. Establish the Backdrop Pass
-      final blurSigma = _settings.effectiveBlur;
-      if (blurSigma > 0 && !_skipBlur) {
-        context.pushLayer(
-          BackdropFilterLayer(
-            filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          ),
-          (context, offset) {
-            // Paint Child & Shader inside the blur context
-            _paintGlassContent(context, offset);
-          },
-          offset,
-        );
-      } else {
-        // No blur needed or skip requested - just paint content
-        _paintGlassContent(context, offset);
-      }
+    if (child == null) return;
+
+    // When the shader hasn't loaded yet, show a tinted passthrough:
+    // same visual as the old `Container(color: glassColor.withValues(alpha:0.15))`
+    // fallback, but without changing the widget tree shape.
+    if (_shader == null) {
+      final paint = Paint()
+        ..color = _settings.effectiveGlassColor.withValues(alpha: 0.15);
+      context.canvas.drawRect(offset & size, paint);
+      super.paint(context, offset);
+      return;
+    }
+
+    // 1. Establish the Backdrop Pass
+    final blurSigma = _settings.effectiveBlur;
+    if (blurSigma > 0 && !_skipBlur) {
+      context.pushLayer(
+        BackdropFilterLayer(
+          filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+        ),
+        (context, offset) {
+          // Paint Child & Shader inside the blur context
+          _paintGlassContent(context, offset);
+        },
+        offset,
+      );
+    } else {
+      // No blur needed or skip requested - just paint content
+      _paintGlassContent(context, offset);
     }
   }
 
@@ -376,7 +460,7 @@ class _RenderLightweightGlass extends RenderProxyBox {
 
     _updateShaderUniforms(size, uOrigin, uScale);
 
-    final paint = Paint()..shader = _shader;
+    final paint = Paint()..shader = _shader!;
     canvas.drawRect(offset & size, paint);
 
     // 3. Child Content Pass (painted on top of glass)
@@ -385,94 +469,173 @@ class _RenderLightweightGlass extends RenderProxyBox {
 
   void _updateShaderUniforms(
       Size size, Offset physicalOrigin, Offset physicalScale) {
+    // _updateShaderUniforms is only ever called from _paintGlassContent,
+    // which is only reached when _shader != null (guarded in paint()).
+    // The assertion makes the non-nullability explicit for the analyser.
+    final shader = _shader!;
     int index = 0;
 
     // 0, 1: uSize (vec2) - Layout Pixels (Logical)
-    _shader.setFloat(index++, size.width);
-    _shader.setFloat(index++, size.height);
+    shader.setFloat(index++, size.width);
+    shader.setFloat(index++, size.height);
 
     // 2, 3: uOrigin (vec2) - Physical Pixels (Window Absolute)
-    _shader.setFloat(index++, physicalOrigin.dx);
-    _shader.setFloat(index++, physicalOrigin.dy);
+    shader.setFloat(index++, physicalOrigin.dx);
+    shader.setFloat(index++, physicalOrigin.dy);
 
     // 4, 5, 6, 7: uGlassColor (vec4)
     final color = _settings.effectiveGlassColor;
-    _shader.setFloat(index++, (color.r * 255.0).round().clamp(0, 255) / 255.0);
-    _shader.setFloat(index++, (color.g * 255.0).round().clamp(0, 255) / 255.0);
-    _shader.setFloat(index++, (color.b * 255.0).round().clamp(0, 255) / 255.0);
-    _shader.setFloat(index++, (color.a * 255.0).round().clamp(0, 255) / 255.0);
+    shader.setFloat(index++, (color.r * 255.0).round().clamp(0, 255) / 255.0);
+    shader.setFloat(index++, (color.g * 255.0).round().clamp(0, 255) / 255.0);
+    shader.setFloat(index++, (color.b * 255.0).round().clamp(0, 255) / 255.0);
+    shader.setFloat(index++, (color.a * 255.0).round().clamp(0, 255) / 255.0);
 
     // 8: uThickness (float)
-    _shader.setFloat(index++, _settings.effectiveThickness);
+    shader.setFloat(index++, _settings.effectiveThickness);
 
     // 9, 10: uLightDirection (vec2) - [cos(angle), -sin(angle)]
-    final radians = _settings.lightAngle * 3.14159265359 / 180.0;
-    _shader.setFloat(index++, math.cos(radians));
-    _shader.setFloat(index++, -math.sin(radians));
+    // lightAngle is in radians (per LiquidGlassSettings API). Pass directly.
+    shader.setFloat(index++, math.cos(_settings.lightAngle));
+    shader.setFloat(index++, -math.sin(_settings.lightAngle));
 
     // 11: uLightIntensity (float)
-    _shader.setFloat(index++, _settings.effectiveLightIntensity);
+    shader.setFloat(index++, _settings.effectiveLightIntensity);
 
     // 12: uAmbientStrength (float)
-    _shader.setFloat(index++, _settings.effectiveAmbientStrength);
+    //
+    // Problem: LiquidGlassSettings.figma() hardcodes ambientStrength to 0.1.
+    // In the lightweight shader, bodyColor = glassColor.rgb * (ambient + boost),
+    // so white * 0.21 ≈ dark grey — far darker than the user intends.
+    //
+    // Fix: Derive a floor from the glass color's "brightness intent":
+    //   brightnessIntent = alpha × luminance × 0.6
+    //
+    // The alpha encodes HOW OPAQUE the user wants the glass (opacity intent).
+    // The luminance encodes HOW BRIGHT the glass color is.
+    // Together they express: "how bright do you want the glass body to appear?"
+    //
+    // Examples:
+    //   white @ alpha 0.6  (figma case): 0.6×1.0×0.6=0.36 → max(0.1,0.36)=0.36 ✓ Fixed
+    //   white @ alpha 0.12 (standard):   0.12×1.0×0.6=0.07 → max(0.4,0.07)=0.4  ✓ Unchanged
+    //   white @ alpha 0.2  (interactive):0.2×1.0×0.6=0.12  → max(0.3,0.12)=0.3  ✓ Unchanged
+    //   white @ alpha 0.08 (bottomBar):  0.08×1.0×0.6=0.05 → max(0.5,0.05)=0.5  ✓ Unchanged
+    //   dark glass @ alpha 0.8:          0.8×0.12×0.6=0.06 → max(0.1,0.06)=0.1  ✓ Unchanged
+    //
+    // This only affects the Skia/Web lightweight shader path.
+    // Impeller uses a different physical model and is completely unaffected.
+    final gc = _settings.effectiveGlassColor;
+    final glassLuminance = 0.299 * gc.r + 0.587 * gc.g + 0.114 * gc.b;
+    final brightnessIntent = gc.a * glassLuminance * 0.6;
+    final effectiveAmbient = math.max(
+      _settings.effectiveAmbientStrength,
+      brightnessIntent,
+    );
+    shader.setFloat(index++, effectiveAmbient);
 
     // 13: uSaturation (float)
-    _shader.setFloat(index++, _settings.effectiveSaturation);
+    shader.setFloat(index++, _settings.effectiveSaturation);
 
     // 14: uRefractiveIndex (float)
-    _shader.setFloat(index++, _settings.refractiveIndex);
+    shader.setFloat(index++, _settings.effectiveRefractiveIndex);
 
     // 15: uChromaticAberration (float)
-    _shader.setFloat(index++, (_settings.chromaticAberration).clamp(0.0, 1.0));
+    shader.setFloat(index++, (_settings.chromaticAberration).clamp(0.0, 1.0));
 
     // 16: uCornerRadius (float) - Logical
-    double cornerRadius = 0.0;
-    final dynamic dynShape = _shape;
-    final shapeStr = _shape.runtimeType.toString().toLowerCase();
+    // For LiquidVerticalRoundedSuperellipse: write -1.0 to signal asymmetric mode.
+    // Slots 24-27 (uData6) will carry the four per-corner radii in that case.
+    double? cornerRadius;
+    double topLeftR = 0.0;
+    double topRightR = 0.0;
+    double bottomRightR = 0.0;
+    double bottomLeftR = 0.0;
+    bool isAsymmetric = false;
 
-    // 1. Try dynamic property extraction (Highest Accuracy)
-    try {
-      if (dynShape.borderRadius is double) {
-        cornerRadius = dynShape.borderRadius;
-      } else if (dynShape.borderRadius is BorderRadius) {
-        cornerRadius = dynShape.borderRadius.topLeft.x;
-      } else if (dynShape.borderRadius is BorderRadiusGeometry) {
-        final resolved = dynShape.borderRadius.resolve(TextDirection.ltr);
-        cornerRadius = resolved.topLeft.x;
-      } else if (dynShape.radius is double) {
-        cornerRadius = dynShape.radius;
-      } else if (dynShape.radius is Radius) {
-        cornerRadius = dynShape.radius.x;
-      }
-    } catch (_) {}
+    if (_shape is LiquidVerticalRoundedSuperellipse) {
+      // Asymmetric mode: each pair of corners has a different radius.
+      // topLeft == topRight == topRadius; bottomLeft == bottomRight == bottomRadius.
+      final s = _shape as LiquidVerticalRoundedSuperellipse;
+      final maxTop = math.min(size.width, size.height) / 2.0;
+      final maxBot = math.min(size.width, size.height) / 2.0;
+      topLeftR = s.topRadius.clamp(0.0, maxTop);
+      topRightR = s.topRadius.clamp(0.0, maxTop);
+      bottomRightR = s.bottomRadius.clamp(0.0, maxBot);
+      bottomLeftR = s.bottomRadius.clamp(0.0, maxBot);
+      isAsymmetric = true;
+    } else {
+      final dynamic dynShape = _shape;
+      final shapeStr = _shape.runtimeType.toString().toLowerCase();
 
-    // 2. Class Name Heuristics (Robustness fallback)
-    if (cornerRadius == 0.0) {
-      if (shapeStr.contains('rounded') || shapeStr.contains('superellipse')) {
-        cornerRadius = 16.0; // Standard pill/card radius
-      } else if (shapeStr.contains('oval') ||
-          shapeStr.contains('circle') ||
-          shapeStr.contains('stadium')) {
-        cornerRadius = math.min(size.width, size.height) / 2.0;
+      // 1. Try dynamic property extraction (Highest Accuracy)
+      try {
+        if (dynShape.borderRadius is num) {
+          cornerRadius = (dynShape.borderRadius as num).toDouble();
+        } else if (dynShape.borderRadius is BorderRadius) {
+          cornerRadius = (dynShape.borderRadius as BorderRadius).topLeft.x;
+        } else if (dynShape.borderRadius is BorderRadiusGeometry) {
+          final resolved = (dynShape.borderRadius as BorderRadiusGeometry)
+              .resolve(TextDirection.ltr);
+          cornerRadius = resolved.topLeft.x;
+        } else if (dynShape.radius is num) {
+          cornerRadius = (dynShape.radius as num).toDouble();
+        } else if (dynShape.radius is Radius) {
+          cornerRadius = (dynShape.radius as Radius).x;
+        }
+      } catch (_) {}
+
+      // 2. Class Name Heuristics (Robustness fallback)
+      // Only apply if the property extraction failed completely
+      if (cornerRadius == null) {
+        if (shapeStr.contains('rounded') || shapeStr.contains('superellipse')) {
+          cornerRadius = 16.0; // Standard pill/card radius
+        } else if (shapeStr.contains('oval') ||
+            shapeStr.contains('circle') ||
+            shapeStr.contains('stadium')) {
+          cornerRadius = math.min(size.width, size.height) / 2.0;
+        } else {
+          cornerRadius = 0.0;
+        }
       }
+
+      final maxRadius = math.min(size.width, size.height) / 2.0;
+      cornerRadius = cornerRadius.clamp(0.0, maxRadius);
     }
 
-    final maxRadius = math.min(size.width, size.height) / 2.0;
-    cornerRadius = cornerRadius.clamp(0.0, maxRadius);
-
-    _shader.setFloat(index++, cornerRadius);
+    shader.setFloat(index++, isAsymmetric ? -1.0 : cornerRadius!);
 
     // 17, 18: uScale (vec2) - Physical Scale (Includes DPR + Transforms)
-    _shader.setFloat(index++, physicalScale.dx);
-    _shader.setFloat(index++, physicalScale.dy);
+    shader.setFloat(index++, physicalScale.dx);
+    shader.setFloat(index++, physicalScale.dy);
 
     // 19: uGlowIntensity (float) - Interactive glow strength (0.0-1.0)
-    _shader.setFloat(index++, _glowIntensity.clamp(0.0, 1.0));
+    shader.setFloat(index++, _glowIntensity.clamp(0.0, 1.0));
 
     // 20: uDensityFactor (float) - Elevation physics (0.0-1.0)
-    _shader.setFloat(index++, _densityFactor.clamp(0.0, 1.0));
+    shader.setFloat(index++, _densityFactor.clamp(0.0, 1.0));
 
     // 21: uIndicatorWeight (float) - Indicator style (0.0-1.0)
-    _shader.setFloat(index++, _indicatorWeight.clamp(0.0, 1.0));
+    shader.setFloat(index++, _indicatorWeight.clamp(0.0, 1.0));
+
+    // 22 (uData5.z): uSpecularSharpnessF (float-encoded int)
+    // 0.0=soft(n=8), 1.0=medium(n=16), 2.0=sharp(n=32)
+    // PP2: Flutter's FragmentShader API only exposes setFloat (no setInt). We pass
+    // 0.0/1.0/2.0 exactly and the shader does int(round()) to recover the integer.
+    // The GPU compiler still sees literal-constant exponents per if/else branch.
+    // NOTE: Previously declared as a separate `uniform float uSpecularSharpnessF`
+    // at slot 24, but Dart only wrote 23 floats — so slot 24 was always 0 (soft).
+    // Fixed: packed into uData5.z so the slot index matches exactly.
+    shader.setFloat(index++, _settings.specularSharpness.glslIndex.toDouble());
+
+    // 23 (uData5.w): backdropLuma — VQ4 content-adaptive strength
+    // 0.15 = dark platform (richer glass), 0.85 = light platform (subtler glass)
+    shader.setFloat(index++, _backdropLuma.clamp(0.0, 1.0));
+
+    // 24..27 (uData6): per-corner radii for asymmetric shapes (GlassModalSheet).
+    // Only populated when isAsymmetric is true (LiquidVerticalRoundedSuperellipse).
+    // Symmetric shapes pass zeros; the shader ignores uData6 when uCornerRadius >= 0.
+    shader.setFloat(index++, topLeftR);
+    shader.setFloat(index++, topRightR);
+    shader.setFloat(index++, bottomRightR);
+    shader.setFloat(index++, bottomLeftR);
   }
 }

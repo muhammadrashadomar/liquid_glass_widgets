@@ -27,3 +27,5 @@ flutter:
   assets:
     - assets/wallpaper.jpg
     - assets/wallpaper_dark.jpg
+    - assets/news_images/
+    - assets/modal_sheet_showcase/

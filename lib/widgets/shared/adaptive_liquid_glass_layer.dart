@@ -1,10 +1,11 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../../src/renderer/liquid_glass_renderer.dart';
 
 import '../../theme/glass_theme_data.dart';
 import '../../types/glass_quality.dart';
+import '../../utils/glass_performance_monitor.dart';
 import 'inherited_liquid_glass.dart';
 
 /// An adaptive liquid glass layer that provides a glass background with proper
@@ -83,13 +84,41 @@ class AdaptiveLiquidGlassLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Resolve settings and quality from theme if not explicitly provided
+    // Resolve settings: start with base defaults, apply theme partial override
+    // (only non-null fields), then let explicit widget settings win entirely.
     final themeData = GlassThemeData.of(context);
-    final effectiveSettings = settings ??
-        themeData.settingsFor(context) ??
-        const LiquidGlassSettings();
+    const baseSettings = LiquidGlassSettings();
+    final themeOverride = themeData.settingsFor(context);
+    final withTheme = themeOverride?.applyTo(baseSettings) ?? baseSettings;
+    final effectiveSettings = settings ?? withTheme;
     final effectiveQuality =
         quality ?? themeData.qualityFor(context) ?? GlassQuality.standard;
+
+    // ---- MINIMAL FAST-PATH --------------------------------------------------
+    // GlassQuality.minimal skips LiquidGlassLayer entirely.
+    //
+    // IMPORTANT: The layer has no shape — it wraps the full bounds including
+    // any padding around pill/circle children. Painting a BackdropFilter +
+    // tinted Container here bleeds into that padding area, creating the dark
+    // rectangle visible above/around the individual glass shapes.
+    //
+    // The correct approach matches how LiquidGlassLayer works in the normal
+    // path: the layer is a TRANSPARENT compositng context. Glass tinting and
+    // blur come entirely from the child AdaptiveGlass widgets, each of which
+    // renders as _FrostedFallback with correct shape-aware clipping.
+    //
+    // In minimal mode there are no blend groups, so the layer is a true
+    // pass-through — just InheritedLiquidGlass so descendants can read
+    // settings and quality.
+    // -------------------------------------------------------------------------
+    if (effectiveQuality == GlassQuality.minimal) {
+      return InheritedLiquidGlass(
+        settings: effectiveSettings,
+        quality: effectiveQuality,
+        isBlurProvidedByAncestor: false,
+        child: child,
+      );
+    }
 
     // Detect if we should use the full Impeller-native rendering pipeline
     final bool useFullRenderer =
@@ -99,21 +128,21 @@ class AdaptiveLiquidGlassLayer extends StatelessWidget {
     // to avoid each child doing its own expensive blur.
     Widget content = child;
 
-    // Root Provider: Always exists to satisfy assertions for grouped widgets.
-    return LiquidGlassLayer(
-      settings: effectiveSettings,
-      fake: !useFullRenderer,
-      child: InheritedLiquidGlass(
+    return PremiumGlassTracker(
+      child: LiquidGlassLayer(
         settings: effectiveSettings,
-        quality: effectiveQuality,
-        isBlurProvidedByAncestor:
-            false, // Root never provides the blur; containers do.
-        child: useFullRenderer
-            ? LiquidGlassBlendGroup(
-                blend: blendAmount,
-                child: content,
-              )
-            : content,
+        child: InheritedLiquidGlass(
+          settings: effectiveSettings,
+          quality: effectiveQuality,
+          isBlurProvidedByAncestor:
+              false, // Root never provides the blur; containers do.
+          child: useFullRenderer
+              ? LiquidGlassBlendGroup(
+                  blend: blendAmount,
+                  child: content,
+                )
+              : content,
+        ),
       ),
     );
   }

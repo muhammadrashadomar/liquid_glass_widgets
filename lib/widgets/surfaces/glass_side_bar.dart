@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
-
+import '../../src/renderer/liquid_glass_renderer.dart';
+import '../../theme/glass_theme_helpers.dart';
 import '../../types/glass_quality.dart';
 import '../shared/adaptive_glass.dart';
 import '../shared/adaptive_liquid_glass_layer.dart';
-import '../shared/inherited_liquid_glass.dart';
 
 /// A vertical navigation sidebar following Apple's iOS 26 liquid glass design guidelines.
 ///
@@ -30,20 +29,20 @@ import '../shared/inherited_liquid_glass.dart';
 ///       ),
 ///       children: [
 ///         GlassSideBarItem(
-///           icon: Icons.home,
+///           icon: Icon(Icons.home),
 ///           label: 'Home',
 ///           isSelected: _selectedIndex == 0,
 ///           onTap: () => _onItemTapped(0),
 ///         ),
 ///         GlassSideBarItem(
-///           icon: Icons.settings,
+///           icon: Icon(Icons.settings),
 ///           label: 'Settings',
 ///           isSelected: _selectedIndex == 1,
 ///           onTap: () => _onItemTapped(1),
 ///         ),
 ///       ],
-///       footer: GlassButton.icon(
-///         icon: Icons.logout,
+///       footer: GlassButton.custom(
+///         icon: Icon(Icons.logout),
 ///         onTap: _logout,
 ///         label: 'Logout',
 ///       ),
@@ -127,11 +126,11 @@ class GlassSideBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Inherit quality from parent layer if not explicitly set
-    final inherited =
-        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
-    final effectiveQuality =
-        quality ?? inherited?.quality ?? GlassQuality.premium;
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: quality,
+      fallback: GlassQuality.premium,
+    );
 
     // Standard sidebar glass settings (often slightly more opaque/different blur than toolbars)
     final effectiveSettings = glassSettings ?? _defaultGlassSettings;
@@ -222,8 +221,8 @@ class GlassSideBarItem extends StatelessWidget {
   static const _defaultSelectionColor =
       Color(0x1AFFFFFF); // white.withValues(alpha: 0.1)
 
-  /// Icon to display.
-  final IconData icon;
+  /// Icon widget to display.
+  final Widget icon;
 
   /// Text label to display.
   final String label;
@@ -278,12 +277,14 @@ class GlassSideBarItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12.0),
           child: Row(
             children: [
-              Icon(
-                icon,
-                color: isSelected
-                    ? effectiveSelectedColor
-                    : effectiveUnselectedColor,
-                size: 20,
+              IconTheme(
+                data: IconThemeData(
+                  color: isSelected
+                      ? effectiveSelectedColor
+                      : effectiveUnselectedColor,
+                  size: 20,
+                ),
+                child: icon,
               ),
               const SizedBox(width: 12),
               Expanded(

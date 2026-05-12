@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../../src/renderer/liquid_glass_renderer.dart';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/scheduler.dart';
@@ -13,6 +13,7 @@ import '../../widgets/interactive/liquid_glass_scope.dart';
 import 'inherited_liquid_glass.dart';
 
 import '../../types/glass_quality.dart';
+import 'adaptive_glass.dart';
 
 /// Enhanced glass renderer specifically for interactive indicators.
 ///
@@ -36,6 +37,7 @@ class GlassEffect extends StatefulWidget {
     this.edgeAlphaMultiplier = 0.4,
     this.rimThickness = 0.5,
     this.rimSmoothing = 1.5,
+    this.clipExpansion = EdgeInsets.zero,
     super.key,
   });
 
@@ -70,6 +72,14 @@ class GlassEffect extends StatefulWidget {
   /// Rim edge smoothing multiplier (default: 1.5)
   final double rimSmoothing;
 
+  /// Extra clip budget forwarded to [LiquidGlass.withOwnLayer] on the Impeller
+  /// premium path.  Use this to prevent the glass BackdropFilterLayer from
+  /// hard-clipping pixels that an ancestor Transform (e.g. jelly physics) has
+  /// pushed outside the tight geometry bounds.
+  ///
+  /// Defaults to [EdgeInsets.zero] — no extra cost for static glass.
+  final EdgeInsets clipExpansion;
+
   static ui.FragmentProgram? _cachedProgram;
   static bool _isPreparing = false;
 
@@ -81,10 +91,18 @@ class GlassEffect extends StatefulWidget {
   static Future<void> preWarm() async {
     if (_cachedProgram != null || _isPreparing) return;
     _isPreparing = true;
+    const path =
+        'packages/liquid_glass_widgets/shaders/interactive_indicator.frag';
+    const testPath = 'shaders/interactive_indicator.frag';
+
     try {
-      final program = await ui.FragmentProgram.fromAsset(
-        'packages/liquid_glass_widgets/shaders/interactive_indicator.frag',
-      );
+      ui.FragmentProgram program;
+      try {
+        program = await ui.FragmentProgram.fromAsset(path);
+      } catch (_) {
+        // Fallback for unit tests where package prefix may not be resolved
+        program = await ui.FragmentProgram.fromAsset(testPath);
+      }
       _cachedProgram = program;
 
       if (!kIsWeb) {
@@ -116,20 +134,28 @@ class _GlassEffectState extends State<GlassEffect>
   bool _loggedCreation = false;
   ui.Image? _backgroundImage;
   late Ticker _ticker;
-  bool _isCapturing = false;
-  int _lastCaptureTime = 0;
   Size? _lastCaptureSize;
   Offset? _lastCapturePosition;
+  // Web only: guards against overlapping async captures.
+  bool _isCapturingAsync = false;
 
   @override
   void initState() {
     super.initState();
-    // Always initialize the custom shader to ensure high-fidelity fallbacks
-    // are available even when native paths are restricted (e.g. inside cards).
-    _initShader();
+    // Skip shader init entirely in minimal quality — build() returns early via
+    // the _FrostedFallback path and the shader is never used.
+    if (widget.quality != GlassQuality.minimal) {
+      _initShader();
+    }
 
     _ticker = createTicker(_handleTick);
-    _updateTicker();
+
+    // Defer ticker update until after first frame to ensure shader is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _updateTicker();
+      }
+    });
   }
 
   @override
@@ -175,8 +201,6 @@ class _GlassEffectState extends State<GlassEffect>
   }
 
   void _handleTick(Duration elapsed) {
-    if (_isCapturing) return;
-
     final key = _effectiveKey;
     if (key == null) return;
 
@@ -184,51 +208,86 @@ class _GlassEffectState extends State<GlassEffect>
         key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
     if (boundary == null) return;
 
-    final now = DateTime.now().millisecondsSinceEpoch;
     final currentSize = boundary.size;
     final currentPos = (key.currentContext?.findRenderObject() as RenderBox?)
         ?.localToGlobal(Offset.zero);
 
-    // Interaction Heartbeat
-    // - Resting: Capture ONLY on geometry change (Pos/Size). No periodic heartbeat.
-    // - Dragging: Capture on interaction (100ms heartbeat) to keep it "live".
-
+    // Capture on geometry change always; during interaction capture every frame
+    // since toImageSync() is synchronous (no GPU readback, no CPU copy).
     final bool isInteracting = widget.interactionIntensity > 0.05;
     bool needsCapture = _backgroundImage == null;
     needsCapture |= _lastCaptureSize != currentSize;
     needsCapture |= _lastCapturePosition != currentPos;
-
-    // Periodic update only during interaction (10fps capture)
-    // This makes the dragging feel "alive" while avoiding 60fps jitter.
-    if (isInteracting) {
-      needsCapture |= (now - _lastCaptureTime) > 100;
-    }
+    needsCapture |= isInteracting; // every frame during drag — free cost
 
     if (needsCapture) {
       _captureBackground(boundary, currentSize, currentPos);
-      _lastCaptureTime = now;
     }
   }
 
-  Future<void> _captureBackground(
-      RenderRepaintBoundary boundary, Size size, Offset? pos) async {
-    _isCapturing = true;
-    final dpr = View.of(context).devicePixelRatio;
-
+  /// Background capture — platform-adaptive.
+  ///
+  /// **Native (Impeller / Skia):** [RenderRepaintBoundary.toImageSync] —
+  /// fully synchronous, stays in GPU memory, zero CPU←GPU readback.
+  /// Runs every frame during active interaction at negligible cost.
+  ///
+  /// **Web (CanvasKit):** async [RenderRepaintBoundary.toImage] at
+  /// `pixelRatio: 1.0`. [toImageSync] is unreliable across CanvasKit versions
+  /// and unavailable in the legacy HTML renderer. The async path is still a
+  /// significant improvement over the previous `pixelRatio: dpr` approach —
+  /// same 1/DPR² memory reduction, with a 1-frame delivery lag during a drag.
+  /// An `_isCapturingAsync` guard prevents overlapping futures.
+  void _captureBackground(
+      RenderRepaintBoundary boundary, Size size, Offset? pos) {
     assert(() {
-      // Validate boundary size
       if (boundary.size.isEmpty) {
         debugPrint(
-          '⚠️ [GlassEffect] Warning: Background boundary has zero size.\n'
-          '   Refraction will not work correctly.\n'
-          '   Ensure LiquidGlassBackground has non-zero dimensions.',
+          '⚠️ [GlassEffect] Background boundary has zero size.\n'
+          '   Ensure GlassRefractionSource (or LiquidGlassScope.stack) wraps\n'
+          '   a widget with non-zero dimensions.',
         );
       }
       return true;
     }());
 
+    if (kIsWeb) {
+      _captureBackgroundAsync(boundary, size, pos);
+    } else {
+      _captureBackgroundSync(boundary, size, pos);
+    }
+  }
+
+  /// Synchronous capture path for native (non-web) platforms.
+  void _captureBackgroundSync(
+      RenderRepaintBoundary boundary, Size size, Offset? pos) {
     try {
-      final image = await boundary.toImage(pixelRatio: dpr);
+      // pixelRatio: 1.0 — logical resolution is sufficient for refraction.
+      // Stays in GPU-accessible memory; handed directly to setImageSampler.
+      final image = boundary.toImageSync(pixelRatio: 1.0);
+      _backgroundImage?.dispose();
+      _backgroundImage = image;
+      _lastCaptureSize = size;
+      _lastCapturePosition = pos;
+      if (mounted) setState(() {});
+    } catch (e) {
+      assert(() {
+        debugPrint('[GlassEffect] toImageSync failed: $e');
+        return true;
+      }());
+    }
+  }
+
+  /// Async capture path for web (CanvasKit / HTML renderer).
+  ///
+  /// [toImageSync] is not reliably available across all CanvasKit builds and
+  /// is absent in the legacy HTML renderer. Using async at `pixelRatio: 1.0`
+  /// still achieves the same memory reduction with an acceptable 1-frame lag.
+  Future<void> _captureBackgroundAsync(
+      RenderRepaintBoundary boundary, Size size, Offset? pos) async {
+    if (_isCapturingAsync) return; // prevent overlapping futures
+    _isCapturingAsync = true;
+    try {
+      final image = await boundary.toImage(pixelRatio: 1.0);
       if (mounted) {
         setState(() {
           _backgroundImage?.dispose();
@@ -239,25 +298,27 @@ class _GlassEffectState extends State<GlassEffect>
       }
     } catch (e) {
       assert(() {
-        debugPrint(
-          '⚠️ [GlassEffect] Warning: Failed to capture background.\n'
-          '   Error: $e\n'
-          '   Refraction may not work correctly.',
-        );
+        debugPrint('[GlassEffect] toImage (web) failed: $e');
         return true;
       }());
-      // Intentionally ignore capture errors to prevent log spam in release
     } finally {
-      _isCapturing = false;
+      _isCapturingAsync = false;
     }
   }
 
   Future<void> _initShader() async {
+    // Check if shader is already available
     if (GlassEffect._cachedProgram == null) {
+      // Shader not ready, load it asynchronously
       await GlassEffect.preWarm();
+
+      // Force rebuild now that shader is ready
+      if (mounted) {
+        setState(() {});
+      }
     }
 
-    if (GlassEffect._cachedProgram != null) {
+    if (GlassEffect._cachedProgram != null && _localShader == null) {
       if (mounted) {
         setState(() {
           // Always create a local shader instance for state isolation
@@ -303,12 +364,34 @@ class _GlassEffectState extends State<GlassEffect>
     final shader = _activeShader;
 
     // 3. Selection Logic:
-    // Path A: Native Impeller (Premium only)
+
+    // Path A: Minimal (shader-free — BackdropFilter + ClipPath via _FrostedFallback)
+    // Routes through AdaptiveGlass which uses ClipPath(ShapeBorderClipper) for
+    // correct clipping on all shape types. No fragment shaders on any platform.
+    //
+    // IMPORTANT: always pass Clip.antiAlias here — never Clip.none.
+    // clipExpansion is only relevant for the LiquidStretch jelly displacement
+    // used in the full-shader path. _FrostedFallback has no displacement, so
+    // Clip.none would skip clipping entirely and let BackdropFilter blur the
+    // full rectangular bounds (the grey-square artifact).
+    if (widget.quality == GlassQuality.minimal || avoidsRefraction) {
+      return AdaptiveGlass(
+        shape: widget.shape,
+        settings: widget.settings,
+        quality: GlassQuality.minimal,
+        useOwnLayer: true,
+        clipBehavior: Clip.antiAlias,
+        isInteractive: true,
+        child: widget.child,
+      );
+    }
+
+    // Path B: Native Impeller (Premium only)
     if (isImpeller && widget.quality == GlassQuality.premium) {
       return LiquidGlass.withOwnLayer(
         shape: widget.shape,
         settings: widget.settings,
-        fake: false,
+        clipExpansion: widget.clipExpansion,
         child: widget.child,
       );
     }
@@ -372,7 +455,7 @@ class _GlassEffectState extends State<GlassEffect>
     return ClipPath(
       clipper: ShapeBorderClipper(shape: widget.shape),
       child: Container(
-        color: widget.settings.effectiveGlassColor.withValues(alpha: 0.15),
+        color: Colors.transparent, // Invisible fallback to prevent flicker
         child: widget.child,
       ),
     );
@@ -631,10 +714,11 @@ class _RenderInteractiveIndicator extends RenderProxyBox {
         // Keep in LOGICAL pixels (don't multiply by DPR)
         bgRelativeOffset = indGlobalPos - bgGlobalPos;
 
-        // Convert texture size from physical to LOGICAL pixels
+        // Image captured at pixelRatio: 1.0 — dimensions are already logical pixels.
+        // No DPR conversion needed (was previously physical→logical).
         bgSize = Size(
-          _backgroundImage!.width / _devicePixelRatio,
-          _backgroundImage!.height / _devicePixelRatio,
+          _backgroundImage!.width.toDouble(),
+          _backgroundImage!.height.toDouble(),
         );
       }
     }
@@ -670,44 +754,50 @@ class _RenderInteractiveIndicator extends RenderProxyBox {
     _shader.setFloat(index++, _settings.effectiveThickness);
 
     // Pass light direction as [cos(angle), -sin(angle)]
-    final radians = _settings.lightAngle * 3.14159265359 / 180.0;
-    _shader.setFloat(index++, math.cos(radians));
-    _shader.setFloat(index++, -math.sin(radians));
+    // lightAngle is in radians (per LiquidGlassSettings API docs and default = 0.5*pi).
+    // Pass directly to cos/sin — no conversion needed.
+    _shader.setFloat(index++, math.cos(_settings.lightAngle));
+    _shader.setFloat(index++, -math.sin(_settings.lightAngle));
 
     _shader.setFloat(index++, _settings.effectiveLightIntensity);
     _shader.setFloat(index++, _settings.effectiveAmbientStrength);
     _shader.setFloat(index++, _settings.effectiveSaturation);
-    _shader.setFloat(index++, _settings.refractiveIndex);
+    _shader.setFloat(index++, _settings.effectiveRefractiveIndex);
     _shader.setFloat(index++, (_settings.chromaticAberration).clamp(0.0, 1.0));
 
-    double cornerRadius = 0.0;
+    // 16: uCornerRadius (float) - Logical
+    double? cornerRadius;
     final dynamic dynShape = _shape;
     final shapeStr = _shape.runtimeType.toString().toLowerCase();
 
     // 1. Try dynamic property extraction (Highest Accuracy)
     try {
-      if (dynShape.borderRadius is double) {
-        cornerRadius = dynShape.borderRadius;
+      if (dynShape.borderRadius is num) {
+        cornerRadius = (dynShape.borderRadius as num).toDouble();
       } else if (dynShape.borderRadius is BorderRadius) {
-        cornerRadius = dynShape.borderRadius.topLeft.x;
+        cornerRadius = (dynShape.borderRadius as BorderRadius).topLeft.x;
       } else if (dynShape.borderRadius is BorderRadiusGeometry) {
-        final resolved = dynShape.borderRadius.resolve(TextDirection.ltr);
+        final resolved = (dynShape.borderRadius as BorderRadiusGeometry)
+            .resolve(TextDirection.ltr);
         cornerRadius = resolved.topLeft.x;
-      } else if (dynShape.radius is double) {
-        cornerRadius = dynShape.radius;
+      } else if (dynShape.radius is num) {
+        cornerRadius = (dynShape.radius as num).toDouble();
       } else if (dynShape.radius is Radius) {
-        cornerRadius = dynShape.radius.x;
+        cornerRadius = (dynShape.radius as Radius).x;
       }
     } catch (_) {}
 
     // 2. Class Name Heuristics (Robustness fallback)
-    if (cornerRadius == 0.0) {
+    // Only apply if the property extraction failed completely
+    if (cornerRadius == null) {
       if (shapeStr.contains('rounded') || shapeStr.contains('superellipse')) {
         cornerRadius = 16.0; // Standard pill/card radius
       } else if (shapeStr.contains('oval') ||
           shapeStr.contains('circle') ||
           shapeStr.contains('stadium')) {
         cornerRadius = math.min(size.width, size.height) / 2.0;
+      } else {
+        cornerRadius = 0.0;
       }
     }
     final maxRadius = math.min(size.width, size.height) / 2.0;

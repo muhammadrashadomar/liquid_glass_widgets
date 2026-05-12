@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../../src/renderer/liquid_glass_renderer.dart';
 import '../../types/glass_quality.dart';
 import '../shared/adaptive_glass.dart';
-import '../shared/inherited_liquid_glass.dart';
+import '../../theme/glass_theme_helpers.dart';
 
 /// A glass picker widget following iOS design patterns.
 ///
@@ -38,8 +38,8 @@ class GlassPicker extends StatelessWidget {
   /// Placeholder when value is null.
   final String placeholder;
 
-  /// Icon to display at the end (defaults to chevron down).
-  final IconData? icon;
+  /// Icon widget to display at the end (defaults to chevron down).
+  final Widget? icon;
 
   /// Called when tapped.
   final VoidCallback? onTap;
@@ -74,10 +74,10 @@ class GlassPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Inherit quality from parent layer if not explicitly set
-    final inherited =
-        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
-    final effectiveQuality =
-        quality ?? inherited?.quality ?? GlassQuality.standard;
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: quality,
+    );
 
     final effectiveTextStyle =
         textStyle ?? const TextStyle(fontSize: 16, color: Colors.white);
@@ -102,10 +102,9 @@ class GlassPicker extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Icon(
-            icon ?? CupertinoIcons.chevron_up_chevron_down,
-            size: 16,
-            color: Colors.white70,
+          IconTheme(
+            data: const IconThemeData(size: 16, color: Colors.white70),
+            child: icon ?? const Icon(CupertinoIcons.chevron_up_chevron_down),
           ),
         ],
       ),
