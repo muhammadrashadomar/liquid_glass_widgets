@@ -7,10 +7,10 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+
 import '../../../src/renderer/liquid_glass_renderer.dart';
 import '../../../types/glass_quality.dart';
 import '../../../utils/draggable_indicator_physics.dart';
-import 'tab_drag_gesture_mixin.dart';
 import '../../../utils/glass_spring.dart';
 import '../../interactive/glass_button.dart';
 import '../../shared/adaptive_glass.dart';
@@ -21,6 +21,7 @@ import '../glass_bottom_bar.dart'
         GlassBottomBarTab,
         MaskingQuality,
         JellyClipper;
+import 'tab_drag_gesture_mixin.dart';
 
 // =============================================================================
 // kBottomBarGlassDefaults — shared glass preset
@@ -138,6 +139,12 @@ class BottomBarTabItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconColor = selected ? selectedIconColor : unselectedIconColor;
     final iconWidget = selected ? (tab.activeIcon ?? tab.icon) : tab.icon;
+    final iconShadows = buildIconShadows(
+      iconColor: iconColor,
+      thickness: tab.thickness,
+      selected: selected,
+      activeIcon: tab.activeIcon,
+    );
 
     return GestureDetector(
       // onTap may be null when selection is owned by the outer TabIndicator
@@ -203,19 +210,20 @@ class BottomBarTabItem extends StatelessWidget {
                         data: IconThemeData(
                           color: iconColor,
                           size: iconSize,
-                          // Use the extracted top-level function for testability
-                          shadows: buildIconShadows(
-                            iconColor: iconColor,
-                            thickness: tab.thickness,
-                            selected: selected,
-                            activeIcon: tab.activeIcon,
-                          ),
+                          // Icon shadows only apply to Icon widgets; custom
+                          // widgets (SVG/PNG/etc) are handled by _TabIcon.
+                          shadows: iconShadows,
                         ),
                         child: DefaultTextStyle(
                           style: DefaultTextStyle.of(context)
                               .style
                               .copyWith(color: iconColor),
-                          child: iconWidget,
+                          child: _TabIcon(
+                            icon: iconWidget,
+                            size: iconSize,
+                            color: iconColor,
+                            shadows: iconShadows,
+                          ),
                         ),
                       ),
                     ],
@@ -240,6 +248,65 @@ class BottomBarTabItem extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TabIcon extends StatelessWidget {
+  const _TabIcon({
+    required this.icon,
+    required this.size,
+    required this.color,
+    required this.shadows,
+  });
+
+  final Widget icon;
+  final double size;
+  final Color color;
+  final List<Shadow>? shadows;
+
+  bool get _isIconLike => icon is Icon || icon is ImageIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    // For Icon / ImageIcon we rely on IconTheme so we don't double-apply color,
+    // size, or shadows.
+    if (_isIconLike) return icon;
+
+    Widget base = SizedBox.square(
+      dimension: size,
+      child: Center(
+        child: ColorFiltered(
+          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+          child: icon,
+        ),
+      ),
+    );
+
+    final shadowsList = shadows;
+    if (shadowsList == null || shadowsList.isEmpty) return base;
+
+    // Emulate IconThemeData.shadows for custom widgets (SVG/PNG/etc) by drawing
+    // tinted duplicates behind the icon at each shadow offset.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        for (final shadow in shadowsList)
+          Transform.translate(
+            offset: shadow.offset,
+            child: SizedBox.square(
+              dimension: size,
+              child: Center(
+                child: ColorFiltered(
+                  colorFilter:
+                      ColorFilter.mode(shadow.color, BlendMode.srcIn),
+                  child: icon,
+                ),
+              ),
+            ),
+          ),
+        base,
+      ],
     );
   }
 }

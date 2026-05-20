@@ -7,6 +7,7 @@ import 'package:liquid_glass_widgets_example/pages/containers_page.dart';
 import 'package:liquid_glass_widgets_example/pages/feedback_page.dart';
 import 'package:liquid_glass_widgets_example/pages/interactive_page.dart';
 import 'package:liquid_glass_widgets_example/pages/overlays_page.dart';
+import 'package:vector_graphics/vector_graphics_compat.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized before loading shaders
@@ -134,13 +135,23 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
       ),
       GlassBottomBarTab(
         label: _Loc.tabFeedback(context),
-        icon: const Icon(CupertinoIcons.hourglass),
-        activeIcon: const Icon(CupertinoIcons.hourglass),
+        icon: VectorGraphic(
+          loader: AssetBytesLoader("assets/offers.ivg"),
+          width: 24,
+          height: 24,
+        ),
+        // icon: const Icon(CupertinoIcons.hourglass),
+        // activeIcon: const Icon(CupertinoIcons.hourglass),
       ),
       GlassBottomBarTab(
         label: _Loc.tabOverlays(context),
-        icon: const Icon(CupertinoIcons.square_stack),
-        activeIcon: const Icon(CupertinoIcons.square_stack_fill),
+        // icon: const Icon(CupertinoIcons.square_stack),
+        icon: VectorGraphic(
+          loader: AssetBytesLoader("assets/explore.ivg"),
+          width: 24,
+          height: 24,
+        ),
+        // activeIcon: const Icon(CupertinoIcons.square_stack_fill),
       ),
     ];
   }

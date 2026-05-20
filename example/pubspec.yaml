@@ -1,10 +1,10 @@
 name: liquid_glass_widgets_example
 description: Example app showcasing Apple Liquid Glass widgets
-publish_to: 'none'
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.5.0 <4.0.0'
+  sdk: ">=3.5.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -19,6 +19,7 @@ dependencies:
   flutter_cupertino_symbols: ^1.0.2
   flutter_localizations:
     sdk: flutter
+  vector_graphics: ^1.1.19
 
 dev_dependencies:
   flutter_test:
@@ -32,3 +33,4 @@ flutter:
     - assets/wallpaper_dark.jpg
     - assets/news_images/
     - assets/modal_sheet_showcase/
+    - assets/

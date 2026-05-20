@@ -761,6 +761,11 @@ class _GlassBottomBarState extends State<GlassBottomBar> {
 /// bar's [IconTheme]. Custom widgets (SVG, PNG, etc.) are responsible for
 /// their own tinting.
 ///
+/// Note: [BottomBarTabItem] applies a best-effort [ColorFiltered] tint and an
+/// emulated shadow halo for non-[Icon] widgets so SVG/vector widgets can behave
+/// more like icons. If your custom widget already bakes in its own colors,
+/// you may want to supply a pre-tinted widget yourself.
+///
 /// ```dart
 /// // Standard Icon — inherits color/size automatically
 /// GlassBottomBarTab(
