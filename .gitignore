@@ -106,6 +106,7 @@ test/golden/**/failures/
 
 # Root-level planning docs
 RENDERER_IMPROVEMENT_PLAN.md
+ARCHITECTURE.md
 
 # Example app — generated platform folders (not needed for a package example)
 example/android/
@@ -121,6 +122,9 @@ example/EVALUATION_CHECKLIST.md
 example/showcase/IMAGE_GUIDE.md
 example/showcase/QUICKSTART.md
 example/showcase/SHOWCASE_SUMMARY.md
+
+# Local-only playground (never commit)
+example/lib/playground/
 
 # Root-level scratch/debug scripts and output (not for repo)
 test_output.txt
