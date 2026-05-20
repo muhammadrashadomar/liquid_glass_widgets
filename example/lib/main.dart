@@ -4,10 +4,8 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:liquid_glass_widgets_example/constants/glass_settings.dart';
 import 'package:liquid_glass_widgets_example/pages/containers_page.dart';
 import 'package:liquid_glass_widgets_example/pages/feedback_page.dart';
-import 'package:liquid_glass_widgets_example/pages/input_page.dart';
 import 'package:liquid_glass_widgets_example/pages/interactive_page.dart';
 import 'package:liquid_glass_widgets_example/pages/overlays_page.dart';
-import 'package:liquid_glass_widgets_example/pages/surfaces_page.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized before loading shaders
@@ -38,6 +36,7 @@ class AppleLiquidGlassShowcaseApp extends StatelessWidget {
           surface: Colors.black,
         ),
       ),
+      locale: Locale('ar'),
       home: const ShowcaseHomePage(),
       debugShowCheckedModeBanner: false,
     );
@@ -60,8 +59,45 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
     InteractivePage(),
     FeedbackPage(),
     OverlaysPage(),
-    SurfacesPage(),
-    InputPage(),
+    // SurfacesPage(),
+    // InputPage(),
+  ];
+
+  final List<GlassBottomBarTab> _tabs = [
+    GlassBottomBarTab(
+      label: 'Home',
+      icon: const Icon(CupertinoIcons.home),
+      activeIcon: const Icon(CupertinoIcons.house_fill),
+    ),
+    GlassBottomBarTab(
+      label: 'Containers',
+      icon: const Icon(CupertinoIcons.square_stack_3d_up),
+      activeIcon: const Icon(CupertinoIcons.square_stack_3d_up_fill),
+    ),
+    GlassBottomBarTab(
+      label: 'Interactive',
+      icon: const Icon(CupertinoIcons.hand_point_right),
+      activeIcon: const Icon(CupertinoIcons.hand_point_right_fill),
+    ),
+    GlassBottomBarTab(
+      label: 'Feedback',
+      icon: const Icon(CupertinoIcons.hourglass),
+      activeIcon: const Icon(CupertinoIcons.hourglass),
+    ),
+    GlassBottomBarTab(
+      label: 'Overlays',
+      icon: const Icon(CupertinoIcons.square_stack),
+      activeIcon: const Icon(CupertinoIcons.square_stack_fill),
+    ),
+    // GlassBottomBarTab(
+    //   label: 'Surfaces',
+    //   icon: const Icon(CupertinoIcons.rectangle_3_offgrid),
+    //   activeIcon: const Icon(CupertinoIcons.rectangle_3_offgrid_fill),
+    // ),
+    // GlassBottomBarTab(
+    //   label: 'Input',
+    //   icon: const Icon(CupertinoIcons.keyboard),
+    // ),
   ];
 
   @override
@@ -86,56 +122,13 @@ class _ShowcaseHomePageState extends State<ShowcaseHomePage> {
             glassSettings: RecommendedGlassSettings.bottomBar,
             // unselectedIconColor: Colors.red,
             // barBorderRadius: 20,
-            tabs: [
-              GlassBottomBarTab(
-                label: 'Home',
-                icon: const Icon(CupertinoIcons.home),
-                activeIcon: const Icon(CupertinoIcons.house_fill),
-              ),
-              GlassBottomBarTab(
-                label: 'Containers',
-                icon: const Icon(CupertinoIcons.square_stack_3d_up),
-                activeIcon: const Icon(CupertinoIcons.square_stack_3d_up_fill),
-              ),
-              GlassBottomBarTab(
-                label: 'Interactive',
-                icon: const Icon(CupertinoIcons.hand_point_right),
-                activeIcon: const Icon(CupertinoIcons.hand_point_right_fill),
-              ),
-              GlassBottomBarTab(
-                label: 'Feedback',
-                icon: const Icon(CupertinoIcons.hourglass),
-                activeIcon: const Icon(CupertinoIcons.hourglass),
-              ),
-              GlassBottomBarTab(
-                label: 'Overlays',
-                icon: const Icon(CupertinoIcons.square_stack),
-                activeIcon: const Icon(CupertinoIcons.square_stack_fill),
-              ),
-              GlassBottomBarTab(
-                label: 'Surfaces',
-                icon: const Icon(CupertinoIcons.rectangle_3_offgrid),
-                activeIcon: const Icon(CupertinoIcons.rectangle_3_offgrid_fill),
-              ),
-              GlassBottomBarTab(
-                label: 'Input',
-                icon: const Icon(CupertinoIcons.keyboard),
-              ),
-            ],
+            tabs: _tabs,
             selectedIndex: _selectedIndex,
             onTabSelected: (index) {
               setState(() {
                 _selectedIndex = index;
               });
             },
-            // extraButton: GlassBottomBarExtraButton(
-            //   icon: Icon(CupertinoIcons.rectangle_3_offgrid_fill),
-            //   iconColor: Colors.amber,
-            //   onTap: () {
-            //
-            //   },
-            //   label: 'AI Chat',
-            // ),
           ),
         ),
       ),

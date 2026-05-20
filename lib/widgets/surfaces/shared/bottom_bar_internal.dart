@@ -106,6 +106,8 @@ class BottomBarTabItem extends StatelessWidget {
     required this.glowSpreadRadius,
     required this.glowOpacity,
     required this.onTap,
+    this.selectedLabelStyle,
+    this.unselectedLabelStyle,
     super.key,
   });
 
@@ -130,7 +132,8 @@ class BottomBarTabItem extends StatelessWidget {
   // Pass null in contexts where the outer TabIndicator owns selection via
   // onTapDown, and accessibility is handled by the indicator's own Semantics.
   final VoidCallback? onTap;
-
+  final TextStyle? selectedLabelStyle;
+  final TextStyle? unselectedLabelStyle;
   @override
   Widget build(BuildContext context) {
     final iconColor = selected ? selectedIconColor : unselectedIconColor;
