@@ -857,4 +857,50 @@ void main() {
       expect(find.byType(GlassBottomBar), findsOneWidget);
     });
   });
+
+  group('GlassBottomBar RTL support', () {
+    final tabs = [
+      const GlassBottomBarTab(label: 'A', icon: Icon(CupertinoIcons.home)),
+      const GlassBottomBarTab(label: 'B', icon: Icon(CupertinoIcons.search)),
+      const GlassBottomBarTab(label: 'C', icon: Icon(CupertinoIcons.person)),
+    ];
+
+    testWidgets('respects RTL Directionality for tab tap selection',
+        (tester) async {
+      int selected = 0;
+      await tester.pumpWidget(
+        createTestApp(
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: SizedBox(
+              width: 300,
+              child: StatefulBuilder(
+                builder: (context, setState) => GlassBottomBar(
+                  tabs: tabs,
+                  selectedIndex: selected,
+                  onTabSelected: (i) => setState(() => selected = i),
+                  maskingQuality: MaskingQuality.off,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // In RTL (width 300, 3 tabs of 100 width each):
+      // - 'A' (index 0) is on the rightmost: x coordinate ~250
+      // - 'B' (index 1) is in the center: x coordinate ~150
+      // - 'C' (index 2) is on the leftmost: x coordinate ~50
+
+      // Tap on the leftmost tab (which should be 'C' / index 2)
+      await tester.tapAt(const Offset(50, 32));
+      await tester.pumpAndSettle();
+      expect(selected, 2);
+
+      // Tap on the rightmost tab (which should be 'A' / index 0)
+      await tester.tapAt(const Offset(250, 32));
+      await tester.pumpAndSettle();
+      expect(selected, 0);
+    });
+  });
 }

@@ -57,7 +57,18 @@ mixin TabDragGestureMixin<T extends StatefulWidget> on State<T> {
   @override
   void initState() {
     super.initState();
-    tabXAlign = computeTabAlignment(tabIndex);
+  }
+
+  TextDirection? _lastDirection;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final direction = Directionality.of(context);
+    if (direction != _lastDirection) {
+      _lastDirection = direction;
+      tabXAlign = computeTabAlignment(tabIndex);
+    }
   }
 
   /// Call from [didUpdateWidget] when tabIndex or tabCount may have changed.
@@ -70,17 +81,23 @@ mixin TabDragGestureMixin<T extends StatefulWidget> on State<T> {
   // ── Coordinate helpers ────────────────────────────────────────────────────
 
   /// Maps a tab index to horizontal alignment in [-1, 1].
-  double computeTabAlignment(int index) =>
-      DraggableIndicatorPhysics.computeAlignment(index, tabCount);
+  double computeTabAlignment(int index) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return DraggableIndicatorPhysics.computeAlignment(index, tabCount,
+        isRtl: isRtl);
+  }
 
   /// Maps a global pointer position to alignment in [-1, 1] with rubber-band
   /// resistance applied at the edges.
-  double alignmentFromGlobal(Offset globalPosition) =>
-      DraggableIndicatorPhysics.getAlignmentFromGlobalPosition(
-        globalPosition,
-        context,
-        tabCount,
-      );
+  double alignmentFromGlobal(Offset globalPosition) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    return DraggableIndicatorPhysics.getAlignmentFromGlobalPosition(
+      globalPosition,
+      context,
+      tabCount,
+      isRtl: isRtl,
+    );
+  }
 
   // ── Gesture handlers ──────────────────────────────────────────────────────
 
@@ -116,12 +133,17 @@ mixin TabDragGestureMixin<T extends StatefulWidget> on State<T> {
   /// Velocity fling is layered on top so a fast swipe carries the indicator
   /// past the nearest-position tab.
   void onBarDragEnd(DragEndDetails d) {
-    final relX = (tabXAlign + 1) / 2;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final rawRelX = (tabXAlign + 1) / 2;
+    final relX = isRtl ? 1.0 - rawRelX : rawRelX;
     final positionIndex =
         (relX * (tabCount - 1)).round().clamp(0, tabCount - 1);
 
     final box = context.findRenderObject()! as RenderBox;
-    final rawVelX = d.velocity.pixelsPerSecond.dx / box.size.width;
+    var rawVelX = d.velocity.pixelsPerSecond.dx / box.size.width;
+    if (isRtl) {
+      rawVelX = -rawVelX;
+    }
     const velocityThreshold = 0.5;
     int target = positionIndex;
     if (rawVelX > velocityThreshold && positionIndex < tabCount - 1) {
@@ -141,7 +163,9 @@ mixin TabDragGestureMixin<T extends StatefulWidget> on State<T> {
   /// `onHorizontalDragCancel` — snap to nearest tab without velocity.
   void onBarDragCancel() {
     if (tabIsDragging) {
-      final relX = (tabXAlign + 1) / 2;
+      final isRtl = Directionality.of(context) == TextDirection.rtl;
+      final rawRelX = (tabXAlign + 1) / 2;
+      final relX = isRtl ? 1.0 - rawRelX : rawRelX;
       final target = (relX * (tabCount - 1)).round().clamp(0, tabCount - 1);
       setState(() {
         tabIsDragging = false;
@@ -161,8 +185,10 @@ mixin TabDragGestureMixin<T extends StatefulWidget> on State<T> {
   /// is set on the same frame as the touch, keeping jelly visible on desktop
   /// where tapDown+tapUp arrive in the same frame.
   void onBarTapDown(TapDownDetails d) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
     final alignment = alignmentFromGlobal(d.globalPosition);
-    final relX = (alignment + 1) / 2;
+    final rawRelX = (alignment + 1) / 2;
+    final relX = isRtl ? 1.0 - rawRelX : rawRelX;
     final index = (relX * tabCount).floor().clamp(0, tabCount - 1);
     notifyTabChanged(index);
   }

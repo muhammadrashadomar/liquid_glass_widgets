@@ -260,7 +260,7 @@ class DraggableIndicatorPhysics {
 
     // Guard against NaN / Infinity from synthetic or injected velocity values.
     // Fall through to nearest-item snap rather than projecting an invalid position.
-    final safeVelocityX = velocityX.isFinite ? velocityX : 0.0;
+    final safeVelocityX = effectiveVelocity.isFinite ? effectiveVelocity : 0.0;
 
     if (safeVelocityX.abs() > velocityThreshold) {
       // High velocity - project where we would end up
